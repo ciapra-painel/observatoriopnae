@@ -1,0 +1,1875 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Observatório PNAE Baixo Sul</title>
+  <meta name="description" content="Plataforma pública de transparência sobre a execução do Programa Nacional de Alimentação Escolar (PNAE) nos 16 municípios do Baixo Sul da Bahia. Iniciativa do CIAPRA.">
+  <meta name="theme-color" content="#52291D">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Observatório PNAE Baixo Sul da Bahia">
+  <meta property="og:description" content="Editais, dados municipais, legislação e notícias sobre a alimentação escolar e a agricultura familiar no Baixo Sul da Bahia.">
+  <meta property="og:image" content="https://i.postimg.cc/8CjXnnZN/Capa-observatorio-atual.png">
+  <meta property="og:url" content="https://www.observatoriopnaebaixosul.com.br/">
+  <link rel="canonical" href="https://www.observatoriopnaebaixosul.com.br/">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              primary: '#52291D',
+              brown: '#52291D',
+              green: '#4DAB3B',
+              charcoal: '#4B4D4F',
+              yellow: '#F6C044',
+              light: '#E6E6E6',
+              darkGreen: '#327025',
+              darkBrown: '#361811',
+              cream: '#F9F9F9'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React, Babel (JSX no navegador), PapaParse (CSV das planilhas) e DOMPurify (segurança do conteúdo das notícias) -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.11/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+      background-color: #F9F9F9;
+    }
+    @keyframes fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .animate-fade-in { animation: fade-in .35s ease-out; }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.33); opacity: 1; }
+      80%, 100% { opacity: 0; }
+    }
+    .pulse-pin::before {
+      content: '';
+      position: absolute;
+      width: 300%;
+      height: 300%;
+      border-radius: 50%;
+      background-color: #F6C044;
+      animation: pulse-ring 1.8s cubic-bezier(0.215, 0.610, 0.355, 1) infinite;
+      top: -100%;
+      left: -100%;
+    }
+    .conteudo-noticia p { margin: 0 0 1em; }
+    .conteudo-noticia a { color: #327025; font-weight: 700; text-decoration: underline; }
+    .conteudo-noticia ul { list-style: disc; padding-left: 1.25rem; margin: .5rem 0; }
+    .conteudo-noticia ol { list-style: decimal; padding-left: 1.25rem; margin: .5rem 0; }
+    .conteudo-noticia h2, .conteudo-noticia h3 { font-weight: 800; color: #52291D; margin: 1rem 0 .5rem; }
+    .conteudo-noticia img { max-width: 100%; border-radius: .75rem; }
+  </style>
+</head>
+<body>
+
+  <div id="root">
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;color:#52291D;font-weight:700;">
+      Carregando o Observatório PNAE...
+    </div>
+  </div>
+  <noscript>
+    <p style="text-align:center;padding:2rem;">Este site precisa de JavaScript ativado para funcionar.</p>
+  </noscript>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useMemo, useEffect, useCallback } = React;
+
+    // =====================================================================================
+    // CONFIGURAÇÃO DO SITE
+    // Tudo que pode mudar com o tempo está aqui. Para alterar, edite os valores e envie
+    // o arquivo novamente ao GitHub.
+    // =====================================================================================
+    const CONFIG = {
+      // Planilha de Editais (BDEditais). A PRIMEIRA aba deve ter o cabeçalho de editais.
+      // Compartilhamento: "Qualquer pessoa com o link → Leitor".
+      PLANILHA_EDITAIS_ID: '1PFE9ErwZLOAgE806VDxeXHHtB1eSNVd9oHDZu60Zejc',
+
+      // Planilha de Notícias (separada). PRIMEIRA aba com o cabeçalho:
+      // Título | Subtítulo | Resumo | Conteúdo | Categoria | Município | Autor | Data | Status | Imagem (URL) | Galeria (URLs separados por vírgula)
+      PLANILHA_NOTICIAS_ID: '1c5XBCnyy2NWsI1RuPX-vy-EMVYc1SSK0FNKWiQH_jLY',
+
+      // Chave da API do Google Drive (usada só para listar a pasta da Biblioteca).
+      // IMPORTANTE: restringir no Google Cloud à "Google Drive API" e aos referenciadores
+      // https://www.observatoriopnaebaixosul.com.br/* e https://observatoriopnaebaixosul.com.br/*
+      DRIVE_API_KEY: 'AIzaSyBqwGTpS3gRriJvMmlSsJLte3U6LMUFqgI',
+      PASTA_BIBLIOTECA_ID: '1Iz86zpbf7KzWqqnfLg-0_tzCuQeVAr6U',
+
+      // Identidade visual
+      LOGO_DRIVE_ID: '1SPhb0f-8BqfW9LidH2t43y-8_zC67Y_i',
+      CAPA_URL: 'https://i.postimg.cc/8CjXnnZN/Capa-observatorio-atual.png',
+      IMAGEM_INTRO_URL: 'https://i.postimg.cc/KcKyLZMm/Gemini-Generated-Image-y27ezy27ezy27ezy.png',
+      MAPA_URL: 'https://i.postimg.cc/kgMSnw5J/Mapa-CIAPRA.png',
+
+      // Contato
+      EMAIL_CONTATO: 'observatorio.pnae@ciapra.ba.gov.br',
+      TELEFONE_CONTATO: '(73) 3256-3563',
+      ENDERECO: 'R. Hildebrando de Araújo Góes, Ituberá - BA, CEP: 45435-000',
+      MAPS_COORD: '-13.732088,-39.141202',
+
+      // Consulta oficial de repasses do FNDE
+      FNDE_URL: 'https://www.fnde.gov.br/pls/simad/internet_fnde.LIBERACOES_01_PC?p_ano=2025&p_programa=&p_uf=BA'
+    };
+
+    // =====================================================================================
+    // DADOS DOS 16 MUNICÍPIOS
+    // valorContratado: repasse PNAE 2025 (FNDE) | agricultores: CAF/MDA jun/2026
+    // alunosRedeMunicipal: Sinopse Estatística da Educação Básica 2025 (Inep)
+    // coord_x / coord_y: posição do pino no mapa, em % da imagem
+    // =====================================================================================
+    const MUNICIPIOS = [
+      { id: 'valenca', nome: 'Valença', nutricionista: 'Geisa Félix Mendes Santos', registro: 'CRN-5 2133-2', email: 'geisafelixnutri29@gmail.com', valorContratado: 1555308, agricultores: 4883, meta30Porcento: 42, alunosRedeMunicipal: 13000, coord_x: 65, coord_y: 35, descricao: 'Capital do Baixo Sul, destaca-se no abastecimento escolar com ampla diversidade de hortifrutis.', logo: 'https://i.postimg.cc/VNx0PdWg/Valenca.png', fotoNutricionista: 'https://i.postimg.cc/pLbXLjKj/Geisa-Felix-Valenca.jpg' },
+      { id: 'itubera', nome: 'Ituberá', nutricionista: 'Núbia Batista dos Santos Rosa', registro: 'CRN-5 9320', email: 'nubia.pnae@gmail.com', valorContratado: 718094, agricultores: 1906, meta30Porcento: 38, alunosRedeMunicipal: 4138, coord_x: 58, coord_y: 60, descricao: 'Referência em cooperativismo de polpas de frutas nativas e derivados de mandioca.', logo: 'https://i.postimg.cc/25bLt4vM/8-Itubera.png', fotoNutricionista: 'https://i.postimg.cc/855T0mgH/Nubia-Batista-Itubera.jpg' },
+      { id: 'cairu', nome: 'Cairu', nutricionista: 'Tatyana Chagas', registro: '—', email: '—', valorContratado: 744742, agricultores: 933, meta30Porcento: 31, alunosRedeMunicipal: 4734, coord_x: 68, coord_y: 47, descricao: 'Logística insular desafiadora com fornecimento expressivo de pescados artesanais locais.', logo: 'https://i.postimg.cc/tCpPgnQz/5-Cairu.jpg', fotoNutricionista: 'https://i.postimg.cc/gwC9wRJK/Tatyana-Chagas-Cairu.jpg' },
+      { id: 'camamu', nome: 'Camamu', nutricionista: 'Thais Costa Oliveira dos Santos', registro: 'CRN-5 1320-1', email: 'thaiscostamutrii@gmail.com', valorContratado: 688563.75, agricultores: 2323, meta30Porcento: 36, alunosRedeMunicipal: 6093, coord_x: 61, coord_y: 78, descricao: 'Abastecimento em comunidades quilombolas com itens tradicionais e agroecológicos.', logo: 'https://i.postimg.cc/xTnHdNDL/1-Camamu.png', fotoNutricionista: 'https://i.postimg.cc/zLsmLWBn/Thais-Costa-Camamu.jpg' },
+      { id: 'taperoa', nome: 'Taperoá', nutricionista: 'Tatiane S. Nascimento', registro: 'CRN-5 5272-3', email: 'tatnutricao@yahoo.com.br', valorContratado: 517363.5, agricultores: 1964, meta30Porcento: 35, alunosRedeMunicipal: 3559, coord_x: 56, coord_y: 48, descricao: 'Cardápios ricos em mandioca, banana da terra e subprodutos do cacau.', logo: 'https://i.postimg.cc/h49Tgbwz/3-Taperoa.png', fotoNutricionista: 'https://i.postimg.cc/mcvxcMD3/Tatiane-Nascimento-Taperoa.jpg' },
+      { id: 'igrapiuna', nome: 'Igrapiúna', nutricionista: 'Larissa Hora', registro: 'CRN-5 1750-8', email: 'larissa.hora@hotmail.com', valorContratado: 431928, agricultores: 1126, meta30Porcento: 45, alunosRedeMunicipal: 2639, coord_x: 58, coord_y: 68, descricao: 'Destaque territorial pelo maior percentual investido na agricultura de pequenas famílias.', logo: 'https://i.postimg.cc/wxhLHcPs/2-Igrapiuna.png', fotoNutricionista: 'https://i.postimg.cc/QMj8pr45/Larissa-Hora-Igrapiuna.jpg' },
+      { id: 'aratuipe', nome: 'Aratuípe', nutricionista: 'Rosângela Mota', registro: 'CRN-5 4475-5', email: 'rosangelanutri13@gmail.com', valorContratado: 338534, agricultores: 946, meta30Porcento: 34, alunosRedeMunicipal: 1608, coord_x: 66, coord_y: 15, descricao: 'Destaque para a produção de hortaliças e artesanato agrícola integrado à merenda.', logo: 'https://i.postimg.cc/YCym8X4T/4-Aratuipe.png', fotoNutricionista: 'https://i.postimg.cc/LsvHD0ww/Rosangela-Mota-Aratuipe.jpg' },
+      { id: 'jaguaripe', nome: 'Jaguaripe', nutricionista: 'Cláudia Moura', registro: '—', email: '—', valorContratado: 439370, agricultores: 2462, meta30Porcento: 32, alunosRedeMunicipal: 3562, coord_x: 74, coord_y: 18, descricao: 'Amplo território com forte inserção de coco, mandioca e pescados artesanais.', logo: 'https://i.postimg.cc/nhLD48LD/9-Jaguaripe.jpg', fotoNutricionista: 'https://i.postimg.cc/3JDxh14z/Claudia-Moura-Jaguaripe.jpg' },
+      { id: 'nilo_pecanha', nome: 'Nilo Peçanha', nutricionista: 'Lucimara Santos de Souza Martins', registro: 'CRN-5 1290-0', email: 'mara.butrimartins@gmail.com', valorContratado: 595207.5, agricultores: 1128, meta30Porcento: 37, alunosRedeMunicipal: 3479, coord_x: 64, coord_y: 54, descricao: 'Rica biodiversidade que abastece as escolas com cacau, banana e polpa de frutas.', logo: 'https://i.postimg.cc/zfsHYVFv/10-Nilo-pecanha.png', fotoNutricionista: 'https://i.postimg.cc/1zympZCs/Lucimara-Martins-Nilo-Pecanha.jpg' },
+      { id: 'gandu', nome: 'Gandu', nutricionista: 'Yoná Brandão', registro: 'CRN-5 1900-6', email: 'brandaoyona@gmail.com', valorContratado: 1179810, agricultores: 504, meta30Porcento: 40, alunosRedeMunicipal: 7591, coord_x: 42, coord_y: 63, descricao: 'Destaque no cultivo do cacau e polpa de cupuaçu diretamente nas escolas.', logo: 'https://i.postimg.cc/7Yw7LJ81/6-Gandu.png', fotoNutricionista: 'https://i.postimg.cc/Z9Gk93Rs/Yona-Brandao-Gandu.jpg' },
+      { id: 'nova_ibia', nome: 'Nova Ibiá', nutricionista: 'Karina Araújo', registro: 'CRN-5 1519-0', email: 'karinanutt@outlook.com', valorContratado: 266106, agricultores: 391, meta30Porcento: 31, alunosRedeMunicipal: 1455, coord_x: 37, coord_y: 64, descricao: 'Fornecimento focado em hortifrutis frescos e pequenos produtores de leite.', logo: 'https://i.postimg.cc/cJgtzQwn/11-Nova-ibia.png', fotoNutricionista: 'https://i.postimg.cc/Lsm9zMCn/Karina-Araujo-Nova-Ibia.jpg' },
+      { id: 'pirai_do_norte', nome: 'Piraí do Norte', nutricionista: 'A definir', registro: '—', email: '—', valorContratado: 242059.5, agricultores: 884, meta30Porcento: 35, alunosRedeMunicipal: 1775, coord_x: 49, coord_y: 65, descricao: 'Forte inserção da mandioca e derivados tradicionais na alimentação escolar.', logo: 'https://i.postimg.cc/G2v8LdXx/12-PIRAI-DO-NORTE.png', fotoNutricionista: null },
+      { id: 'wenceslau_guimaraes', nome: 'Wenceslau Guimarães', nutricionista: 'Ana Karoline', registro: '—', email: '—', valorContratado: 604410, agricultores: 1551, meta30Porcento: 39, alunosRedeMunicipal: 4719, coord_x: 40, coord_y: 58, descricao: 'Grande produtor de banana da terra, um dos principais pilares do cardápio local.', logo: 'https://i.postimg.cc/Px1pXT6h/16-Wenceslau-Guimares.png', fotoNutricionista: 'https://i.postimg.cc/tCV4bkZm/Ana-Karoline-Wenceslau-Guimaraes.jpg' },
+      { id: 'teolandia', nome: 'Teolândia', nutricionista: 'Eliana Santos', registro: 'CRN-5 1694-3', email: 'eliannanutri@gmail.com', valorContratado: 363745.5, agricultores: 935, meta30Porcento: 36, alunosRedeMunicipal: 2734, coord_x: 42, coord_y: 50, descricao: 'Referência em banana, maracujá e hortaliças direto da agricultura familiar.', logo: 'https://i.postimg.cc/g0CLbnHw/13-Teolandia.png', fotoNutricionista: 'https://i.postimg.cc/FH5sHS0Z/Eliana-Santos-Teolandia.jpg' },
+      { id: 'presidente_tancredo_neves', nome: 'Pres. Tancredo Neves', nutricionista: 'Luzia Mota Barreto', registro: 'CRN-5 1735-6', email: 'motabarretoluzia@gmail.com', valorContratado: 657333, agricultores: 2347, meta30Porcento: 41, alunosRedeMunicipal: 5697, coord_x: 45, coord_y: 42, descricao: 'Destaque no cultivo da mandioca e frutas tropicais de agricultores familiares.', logo: 'https://i.postimg.cc/cJptGrBD/15-Presidente-Tancredo-Neves.jpg', fotoNutricionista: 'https://i.postimg.cc/nLTH2wg1/Luzia-Barreto-Presidente-Tancredo-Neves.jpg' },
+      { id: 'ibirapitanga', nome: 'Ibirapitanga', nutricionista: 'Mateus Quinto', registro: 'CRN-5 1665-0', email: 'quintomateusnutri5@gmail.com', valorContratado: 629606, agricultores: 803, meta30Porcento: 38, alunosRedeMunicipal: 5154, coord_x: 46, coord_y: 85, descricao: 'Forte inserção do cacau, cupuaçu e raízes tropicais produzidas por cooperativas regionais.', logo: 'https://i.postimg.cc/kghtwj63/7-Ibirapitanga.png', fotoNutricionista: null }
+    ];
+
+    const VIEWS = ['home', 'editais', 'municipios', 'biblioteca', 'noticias', 'sobre'];
+    const VIEW_LABELS = { home: 'Início', editais: 'Editais', municipios: 'Municípios', biblioteca: 'Biblioteca', noticias: 'Notícias', sobre: 'Sobre a Rede' };
+    const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
+
+    const PLACEHOLDER_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+      "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='450'><rect width='100%' height='100%' fill='#52291D'/><text x='50%' y='50%' fill='#F6C044' font-family='Arial' font-size='36' font-weight='bold' text-anchor='middle' dominant-baseline='middle'>Observatório PNAE</text></svg>"
+    );
+
+    // =====================================================================================
+    // FUNÇÕES AUXILIARES
+    // =====================================================================================
+    const normalizar = (str) => String(str || '')
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+
+    const PALAVRAS_MINUSCULAS = ['de', 'da', 'do', 'das', 'dos', 'e'];
+    const toTitleCase = (str) => String(str || '').toLowerCase().split(' ')
+      .map((w, i) => (i > 0 && PALAVRAS_MINUSCULAS.includes(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+
+    // Converte o nome do município vindo da planilha para o nome padronizado do site
+    const nomeMunicipioPadrao = (bruto) => {
+      const n = normalizar(bruto);
+      const m = MUNICIPIOS.find(mu => normalizar(mu.nome) === n || normalizar(mu.id.replace(/_/g, ' ')) === n);
+      return m ? m.nome : toTitleCase(bruto);
+    };
+
+    const escapeHtml = (s) => String(s || '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+    // Prepara o conteúdo das notícias: aceita texto simples (com parágrafos) ou HTML,
+    // e sempre passa pelo DOMPurify para remover qualquer código malicioso.
+    const prepararConteudo = (texto) => {
+      if (!texto) return '';
+      const temHtml = /<[a-z][\s\S]*>/i.test(texto);
+      const temBlocos = /<(p|br|div|ul|ol|h[1-6]|table)\b/i.test(texto);
+      const html = temHtml
+        ? (temBlocos ? texto : texto.split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join(''))
+        : texto.split(/\n{2,}/).map(p => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`).join('');
+      if (window.DOMPurify) return window.DOMPurify.sanitize(html, { ADD_ATTR: ['target'] });
+      return `<p>${escapeHtml(texto).replace(/\n/g, '<br>')}</p>`;
+    };
+
+    // Converte link de compartilhamento do Google Drive em link de imagem que carrega no site
+    const linkImagemDrive = (id, largura = 1600) => `https://drive.google.com/thumbnail?id=${id}&sz=w${largura}`;
+    const converterLinkDrive = (url) => {
+      if (!url) return '';
+      const str = String(url).trim();
+      const padroes = [
+        /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/,
+        /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/,
+        /google\.com\/uc\?[^"]*id=([a-zA-Z0-9_-]+)/,
+        /drive\.google\.com\/thumbnail\?id=([a-zA-Z0-9_-]+)/
+      ];
+      for (const p of padroes) {
+        const m = str.match(p);
+        if (m && m[1]) return linkImagemDrive(m[1]);
+      }
+      return str;
+    };
+
+    // ---- Datas ----
+    const criarData = (y, m, d) => {
+      if (!y || m < 1 || m > 12 || d < 1 || d > 31) return null;
+      const dt = new Date(y, m - 1, d);
+      return dt.getMonth() === m - 1 ? dt : null;
+    };
+    const excelSerialToDate = (serial) => {
+      const dt = new Date(Math.round((serial - 25569) * 86400 * 1000));
+      return new Date(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate());
+    };
+    // Descobre se uma coluna de datas está em DD/MM/AAAA (padrão BR) ou MM/DD/AAAA (padrão EUA),
+    // olhando todos os valores da coluna. Na dúvida, assume o padrão brasileiro.
+    const detectarOrdemDatas = (valores) => {
+      let dmy = 0, mdy = 0;
+      valores.forEach(v => {
+        const m = String(v || '').trim().match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-]\d{2,4}/);
+        if (!m) return;
+        if (+m[1] > 12) dmy++;
+        else if (+m[2] > 12) mdy++;
+      });
+      return mdy > dmy ? 'MDY' : 'DMY';
+    };
+    const parseData = (valor, ordem = 'DMY') => {
+      if (valor === null || valor === undefined || valor === '') return null;
+      if (typeof valor === 'number') return excelSerialToDate(valor);
+      const s = String(valor).trim();
+      if (!s) return null;
+      let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (m) return criarData(+m[1], +m[2], +m[3]);
+      m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);
+      if (m) {
+        let a = +m[1], b = +m[2], y = +m[3];
+        if (y < 100) y += 2000;
+        let dia, mes;
+        if (a > 12) { dia = a; mes = b; }
+        else if (b > 12) { dia = b; mes = a; }
+        else if (ordem === 'MDY') { mes = a; dia = b; }
+        else { dia = a; mes = b; }
+        return criarData(y, mes, dia);
+      }
+      return null;
+    };
+    const formatarDataBR = (dt) => dt
+      ? `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()}`
+      : '';
+    const paraISO = (dt) => dt
+      ? `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+      : '';
+    // Exibe AAAA-MM-DD como DD/MM/AAAA sem erro de fuso horário
+    const isoParaBR = (iso) => {
+      const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+      return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso || '');
+    };
+
+    const situacaoPorData = (dt) => {
+      if (!dt) return 'Sem data';
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      return dt < hoje ? 'Encerrado' : 'Aberto';
+    };
+
+    // ---- Valores monetários ----
+    const formatarMoeda = (valor) => {
+      if (valor === null || valor === undefined || valor === '') return '';
+      if (typeof valor === 'number') {
+        return isNaN(valor) ? '' : valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      }
+      const s = String(valor).trim();
+      if (!s) return '';
+      if (s.toUpperCase().includes('R$')) return s;
+      if (/^-?\d+([.,]\d+)?$/.test(s)) {
+        const n = parseFloat(s.replace(',', '.'));
+        if (!isNaN(n)) return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      }
+      return s;
+    };
+    const moedaParaNumero = (valor) => {
+      if (valor === null || valor === undefined || valor === '') return 0;
+      if (typeof valor === 'number') return valor;
+      const limpo = String(valor).replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
+      const n = parseFloat(limpo);
+      return isNaN(n) ? 0 : n;
+    };
+
+    // ---- Leitura das planilhas ----
+    const baixarCSV = (url) => new Promise((resolve, reject) => {
+      Papa.parse(url, {
+        download: true,
+        header: false,
+        skipEmptyLines: false,
+        complete: (r) => resolve(r.data || []),
+        error: (err) => reject(err)
+      });
+    });
+    // Tenta a exportação direta e, se não vier nada útil, a consulta gviz como reserva
+    const lerPrimeiraAba = async (sheetId, validar) => {
+      const urls = [
+        `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=0`,
+        `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=0`
+      ];
+      for (const url of urls) {
+        try {
+          const linhas = await baixarCSV(url);
+          if (validar(linhas)) return linhas;
+        } catch (e) {
+          console.warn('[Observatório PNAE] Falha ao ler', url, e);
+        }
+      }
+      return null;
+    };
+
+    // ---- Editais ----
+    const encontrarCabecalhoEditais = (linhas) => {
+      for (let i = 0; i < Math.min(10, linhas.length); i++) {
+        const norm = (linhas[i] || []).map(normalizar);
+        if (norm.some(c => c.includes('municipio')) && norm.some(c => c.includes('edital') && !c.includes('valor'))) return i;
+      }
+      return -1;
+    };
+    const mapearColunasEditais = (cab) => {
+      const n = (cab || []).map(normalizar);
+      const idx = (f) => n.findIndex(f);
+      return {
+        municipio: idx(h => h.includes('municipio')),
+        escola: idx(h => h.includes('escola')),
+        numeroEdital: idx(h => h.includes('edital') && !h.includes('valor')),
+        dataLancamento: idx(h => h.includes('lancamento')),
+        dataFechamento: idx(h => h.includes('fechamento')),
+        vigencia: idx(h => h.includes('vigencia')),
+        valorEdital: idx(h => h.includes('valor') && h.includes('edital')),
+        contemplados: idx(h => h.includes('contempl')),
+        numeroContrato: idx(h => h.includes('contrato') && !h.includes('valor')),
+        valorContrato: idx(h => h.includes('valor') && h.includes('contrato')),
+        familiasBeneficiadas: idx(h => h.includes('familia')),
+        alunosBeneficiados: idx(h => h.includes('aluno'))
+      };
+    };
+    const IGNORAR_MUNICIPIO = ['estado da bahia', 'total', 'municipios'];
+    const processarEditais = (linhas) => {
+      const iCab = encontrarCabecalhoEditais(linhas);
+      if (iCab === -1) return [];
+      const col = mapearColunasEditais(linhas[iCab]);
+      const dados = linhas.slice(iCab + 1);
+      const ordemLanc = col.dataLancamento >= 0 ? detectarOrdemDatas(dados.map(r => r[col.dataLancamento])) : 'DMY';
+      const ordemFech = col.dataFechamento >= 0 ? detectarOrdemDatas(dados.map(r => r[col.dataFechamento])) : 'DMY';
+      const lista = [];
+      dados.forEach((row, i) => {
+        const get = (k) => (col[k] >= 0 ? String(row[col[k]] ?? '').trim() : '');
+        const municipioBruto = get('municipio');
+        const numero = get('numeroEdital');
+        if (!municipioBruto || !numero) return;
+        if (IGNORAR_MUNICIPIO.includes(normalizar(municipioBruto))) return;
+        const dtLanc = col.dataLancamento >= 0 ? parseData(row[col.dataLancamento], ordemLanc) : null;
+        const dtFech = col.dataFechamento >= 0 ? parseData(row[col.dataFechamento], ordemFech) : null;
+        const valorEdital = formatarMoeda(get('valorEdital'));
+        const valorContrato = formatarMoeda(get('valorContrato'));
+        const ano = (numero.match(/(\d{4})/) || [])[1] || (dtFech ? String(dtFech.getFullYear()) : '');
+        lista.push({
+          id: `edital-${iCab + 1 + i}`,
+          municipio: nomeMunicipioPadrao(municipioBruto),
+          escola: get('escola'),
+          numero: /chamada/i.test(numero) ? numero : `Chamada Pública nº ${numero}`,
+          dataLancamento: formatarDataBR(dtLanc),
+          data: formatarDataBR(dtFech) || 'Não informada',
+          dataFechamentoObj: dtFech,
+          vigencia: get('vigencia') || '—',
+          valorEdital,
+          contemplados: get('contemplados'),
+          numeroContrato: get('numeroContrato'),
+          valorContrato: valorContrato || valorEdital || 'A definir',
+          familiasBeneficiadas: get('familiasBeneficiadas'),
+          alunosBeneficiados: get('alunosBeneficiados'),
+          situacao: situacaoPorData(dtFech),
+          ano
+        });
+      });
+      // Mais recentes primeiro
+      return lista.sort((a, b) => (b.dataFechamentoObj?.getTime() || 0) - (a.dataFechamentoObj?.getTime() || 0));
+    };
+
+    // ---- Notícias ----
+    const encontrarCabecalhoNoticias = (linhas) => {
+      for (let i = 0; i < Math.min(10, linhas.length); i++) {
+        if ((linhas[i] || []).map(normalizar).some(c => c.includes('titulo') && !c.includes('sub'))) return i;
+      }
+      return -1;
+    };
+    const mapearColunasNoticias = (cab) => {
+      const n = (cab || []).map(normalizar);
+      const idx = (f) => n.findIndex(f);
+      return {
+        titulo: idx(h => h.includes('titulo') && !h.includes('sub')),
+        subtitulo: idx(h => h.includes('subtitulo')),
+        resumo: idx(h => h.includes('resumo')),
+        conteudo: idx(h => h.includes('conteudo')),
+        categoria: idx(h => h.includes('categoria') || h.includes('assunto')),
+        municipio: idx(h => h.includes('municipio')),
+        autor: idx(h => h.includes('autor')),
+        data: idx(h => h.includes('data')),
+        status: idx(h => h.includes('status')),
+        imagem: idx(h => h.includes('imagem') && !h.includes('galeria')),
+        galeria: idx(h => h.includes('galeria'))
+      };
+    };
+    const processarNoticias = (linhas) => {
+      const iCab = encontrarCabecalhoNoticias(linhas);
+      if (iCab === -1) return [];
+      const col = mapearColunasNoticias(linhas[iCab]);
+      const dados = linhas.slice(iCab + 1);
+      const ordem = col.data >= 0 ? detectarOrdemDatas(dados.map(r => r[col.data])) : 'DMY';
+      const lista = [];
+      dados.forEach((row, i) => {
+        const get = (k) => (col[k] >= 0 ? String(row[col[k]] ?? '').trim() : '');
+        const titulo = get('titulo');
+        if (!titulo) return;
+        const status = normalizar(get('status'));
+        if (status === 'rascunho' || status === 'despublicada' || status === 'oculta') return;
+        const dt = col.data >= 0 ? parseData(row[col.data], ordem) : null;
+        const galeria = get('galeria')
+          ? get('galeria').split(/[,\n]/).map(s => converterLinkDrive(s.trim())).filter(Boolean)
+          : [];
+        lista.push({
+          id: `noticia-${iCab + 1 + i}`,
+          titulo,
+          subtitulo: get('subtitulo'),
+          resumo: get('resumo'),
+          conteudo: get('conteudo'),
+          categoria: get('categoria') || 'Notícia',
+          municipio: get('municipio') || 'Regional / Baixo Sul',
+          autor: get('autor') || 'Comunicação CIAPRA',
+          data: paraISO(dt),
+          imagem: converterLinkDrive(get('imagem')),
+          galeria
+        });
+      });
+      return lista.sort((a, b) => (b.data || '').localeCompare(a.data || ''));
+    };
+
+    const formatarTamanho = (bytes) => {
+      const b = parseInt(bytes, 10);
+      if (!b || isNaN(b)) return '';
+      if (b < 1024) return `${b} B`;
+      if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+      return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+    };
+    const iconeArquivo = (mime) => {
+      if (!mime) return '📄';
+      if (mime.includes('pdf')) return '📕';
+      if (mime.includes('spreadsheet')) return '📊';
+      if (mime.includes('document')) return '📘';
+      if (mime.includes('presentation')) return '📙';
+      if (mime.includes('image')) return '🖼️';
+      if (mime.includes('folder')) return '📁';
+      return '📄';
+    };
+
+    // Imagem com troca automática para um marcador visual caso o link quebre
+    function Img({ src, alt, className, fallback = PLACEHOLDER_IMG, ...rest }) {
+      const [erro, setErro] = useState(false);
+      useEffect(() => setErro(false), [src]);
+      return (
+        <img
+          src={!src || erro ? fallback : src}
+          alt={alt}
+          className={className}
+          loading="lazy"
+          onError={() => setErro(true)}
+          {...rest}
+        />
+      );
+    }
+
+    function EstadoVazio({ status, vazio, erro }) { return (
+      <div className="col-span-full text-center py-12 text-brand-charcoal/60 text-sm">
+        {status === 'carregando' && (
+          <span className="inline-flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-brand-yellow animate-pulse inline-block"></span>
+            Carregando dados...
+          </span>
+        )}
+        {status === 'erro' && <span>{erro}</span>}
+        {status === 'ok' && <span>{vazio}</span>}
+      </div>
+    ); }
+
+    function CardNoticia({ item, onOpen }) { return (
+      <div className="bg-white rounded-2xl overflow-hidden border border-brand-light/60 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col h-full">
+        <div className="h-44 relative overflow-hidden shrink-0">
+          <Img src={item.imagem} alt={item.titulo} className="w-full h-full object-cover" />
+          <span className="absolute top-3 left-3 bg-brand-primary text-brand-yellow font-extrabold text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider shadow">
+            {item.categoria}
+          </span>
+        </div>
+        <div className="p-5 flex-grow flex flex-col justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] text-brand-charcoal/50 font-bold">{isoParaBR(item.data)}</span>
+              <span className="text-[10px] text-brand-green font-bold truncate">📍 {item.municipio}</span>
+            </div>
+            <h3 className="text-base font-extrabold text-brand-brown leading-snug line-clamp-2">{item.titulo}</h3>
+            <p className="text-xs text-brand-charcoal/75 leading-relaxed line-clamp-3">{item.resumo}</p>
+          </div>
+          <div className="pt-4 mt-4 border-t border-brand-light/50">
+            <button
+              onClick={() => onOpen(item)}
+              className="w-full py-2 bg-brand-cream hover:bg-brand-brown hover:text-white text-brand-brown font-extrabold rounded-xl text-xs tracking-wider transition-all duration-300 shadow-sm"
+            >
+              Leia mais →
+            </button>
+          </div>
+        </div>
+      </div>
+    ); }
+
+    const viewFromHash = () => {
+      const h = window.location.hash.replace('#', '').split('/')[0];
+      return VIEWS.includes(h) ? h : 'home';
+    };
+
+    // =====================================================================================
+    // APLICAÇÃO
+    // =====================================================================================
+    function App() {
+      const [view, setView] = useState(viewFromHash);
+      const [selectedMunicipio, setSelectedMunicipio] = useState(null);
+      const [selectedNoticia, setSelectedNoticia] = useState(null);
+      const [relatorioMunicipio, setRelatorioMunicipio] = useState(null);
+      const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+      const [toast, setToast] = useState(null);
+
+      // Acessibilidade
+      const [fontSize, setFontSize] = useState(16);
+      const [highContrast, setHighContrast] = useState(false);
+      const [srMensagem, setSrMensagem] = useState('');
+
+      // Busca e filtros
+      const [globalSearch, setGlobalSearch] = useState('');
+      const [filtroMuni, setFiltroMuni] = useState('');
+      const [filtroSit, setFiltroSit] = useState('');
+      const [visualizacaoEditais, setVisualizacaoEditais] = useState('cards');
+
+      // Dados das planilhas
+      const [editais, setEditais] = useState([]);
+      const [statusEditais, setStatusEditais] = useState('carregando'); // carregando | ok | erro
+      const [noticias, setNoticias] = useState([]);
+      const [statusNoticias, setStatusNoticias] = useState('carregando');
+
+      // Biblioteca
+      const [bibliotecaArquivos, setBibliotecaArquivos] = useState([]);
+      const [isLoadingBiblioteca, setIsLoadingBiblioteca] = useState(false);
+      const [bibliotecaErro, setBibliotecaErro] = useState(false);
+      const [bibliotecaBusca, setBibliotecaBusca] = useState('');
+      const [bibliotecaPilha, setBibliotecaPilha] = useState([]);
+      const [previewFile, setPreviewFile] = useState(null);
+
+      const [imagemAmpliada, setImagemAmpliada] = useState(null);
+      const [mostrarDetalhamentoFNDE, setMostrarDetalhamentoFNDE] = useState(false);
+      const [logoErro, setLogoErro] = useState(false);
+
+      // Carrosséis
+      const [activeSlide, setActiveSlide] = useState(0);
+      const [isHovered, setIsHovered] = useState(false);
+      const [visibleCount, setVisibleCount] = useState(4);
+      const [featuredSlideIndex, setFeaturedSlideIndex] = useState(0);
+      const [isFeaturedHovered, setIsFeaturedHovered] = useState(false);
+
+      // Filtros públicos de notícias
+      const [newsSearch, setNewsSearch] = useState('');
+      const [newsMunicipio, setNewsMunicipio] = useState('');
+      const [newsCategoria, setNewsCategoria] = useState('');
+      const [newsDataDe, setNewsDataDe] = useState('');
+      const [newsDataAte, setNewsDataAte] = useState('');
+
+      // Formulário de contato
+      const [contatoNome, setContatoNome] = useState('');
+      const [contatoEmail, setContatoEmail] = useState('');
+      const [contatoTelefone, setContatoTelefone] = useState('');
+      const [contatoAssunto, setContatoAssunto] = useState('');
+      const [contatoMensagem, setContatoMensagem] = useState('');
+      const [feedbackContato, setFeedbackContato] = useState(false);
+      const [isSendingContato, setIsSendingContato] = useState(false);
+
+      const triggerToast = (message, type = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 4000);
+      };
+      const anunciar = (msg) => {
+        setSrMensagem(msg);
+        setTimeout(() => setSrMensagem(''), 3000);
+      };
+
+      // ---- Navegação (cada seção tem endereço próprio, ex: /#editais, e o botão Voltar funciona) ----
+      const limparSelecoes = () => {
+        setSelectedMunicipio(null);
+        setSelectedNoticia(null);
+        setRelatorioMunicipio(null);
+        setMobileMenuOpen(false);
+        setGlobalSearch('');
+      };
+      const irPara = (v) => {
+        limparSelecoes();
+        setView(v);
+        const novoHash = v === 'home' ? '' : '#' + v;
+        if (window.location.hash !== novoHash) {
+          window.history.pushState(null, '', novoHash || window.location.pathname);
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+      useEffect(() => {
+        const onPop = () => { limparSelecoes(); setView(viewFromHash()); };
+        window.addEventListener('popstate', onPop);
+        return () => window.removeEventListener('popstate', onPop);
+      }, []);
+
+      const abrirNoticia = (item) => {
+        irPara('noticias');
+        setSelectedNoticia(item);
+      };
+
+      // ---- Carregamento das planilhas ----
+      const carregarEditais = useCallback(async () => {
+        setStatusEditais('carregando');
+        const linhas = await lerPrimeiraAba(CONFIG.PLANILHA_EDITAIS_ID, (l) => processarEditais(l).length > 0);
+        if (linhas) {
+          setEditais(processarEditais(linhas));
+          setStatusEditais('ok');
+        } else {
+          setEditais([]);
+          setStatusEditais('erro');
+        }
+      }, []);
+
+      const carregarNoticias = useCallback(async () => {
+        setStatusNoticias('carregando');
+        const linhas = await lerPrimeiraAba(CONFIG.PLANILHA_NOTICIAS_ID, (l) => encontrarCabecalhoNoticias(l) !== -1);
+        if (linhas) {
+          setNoticias(processarNoticias(linhas));
+          setStatusNoticias('ok');
+        } else {
+          setNoticias([]);
+          setStatusNoticias('erro');
+        }
+      }, []);
+
+      useEffect(() => {
+        carregarEditais();
+        carregarNoticias();
+      }, [carregarEditais, carregarNoticias]);
+
+      // ---- Biblioteca (pasta do Google Drive) ----
+      const fetchBiblioteca = (folderId) => {
+        if (!CONFIG.DRIVE_API_KEY) return;
+        setIsLoadingBiblioteca(true);
+        setBibliotecaErro(false);
+        const params = new URLSearchParams({
+          q: `'${folderId}' in parents and trashed = false`,
+          key: CONFIG.DRIVE_API_KEY,
+          fields: 'files(id,name,mimeType,size)',
+          orderBy: 'folder,name',
+          pageSize: '200',
+          includeItemsFromAllDrives: 'true',
+          supportsAllDrives: 'true'
+        });
+        fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.files) setBibliotecaArquivos(data.files);
+            else {
+              console.error('[Observatório PNAE] Erro da API do Drive:', data.error || data);
+              setBibliotecaErro(true);
+            }
+          })
+          .catch(err => {
+            console.error('[Observatório PNAE] Erro ao listar a Biblioteca:', err);
+            setBibliotecaErro(true);
+          })
+          .finally(() => setIsLoadingBiblioteca(false));
+      };
+      const entrarNaPasta = (pasta) => {
+        setBibliotecaPilha(prev => [...prev, { id: pasta.id, name: pasta.name }]);
+        setBibliotecaBusca('');
+        setBibliotecaArquivos([]);
+        fetchBiblioteca(pasta.id);
+      };
+      const voltarParaPasta = (index) => {
+        const nova = bibliotecaPilha.slice(0, index + 1);
+        setBibliotecaPilha(nova);
+        setBibliotecaBusca('');
+        setBibliotecaArquivos([]);
+        fetchBiblioteca(nova[nova.length - 1].id);
+      };
+      useEffect(() => {
+        if (view === 'biblioteca' && CONFIG.DRIVE_API_KEY && bibliotecaPilha.length === 0) {
+          setBibliotecaPilha([{ id: CONFIG.PASTA_BIBLIOTECA_ID, name: 'Biblioteca' }]);
+          fetchBiblioteca(CONFIG.PASTA_BIBLIOTECA_ID);
+        }
+      }, [view]);
+      const bibliotecaFiltrada = useMemo(() => {
+        const t = bibliotecaBusca.trim().toLowerCase();
+        return t ? bibliotecaArquivos.filter(f => f.name.toLowerCase().includes(t)) : bibliotecaArquivos;
+      }, [bibliotecaArquivos, bibliotecaBusca]);
+
+      useEffect(() => { setMostrarDetalhamentoFNDE(false); }, [selectedMunicipio]);
+
+      useEffect(() => {
+        const onResize = () => {
+          if (window.innerWidth >= 1280) setVisibleCount(4);
+          else if (window.innerWidth >= 1024) setVisibleCount(3);
+          else if (window.innerWidth >= 768) setVisibleCount(2);
+          else setVisibleCount(1);
+        };
+        onResize();
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+      }, []);
+
+      // ---- Derivados ----
+      const carouselNoticias = useMemo(() => noticias.slice(0, 8), [noticias]);
+      const ultimasTres = useMemo(() => noticias.slice(0, 3), [noticias]);
+      const municipiosNoticias = useMemo(() => Array.from(new Set(noticias.map(n => n.municipio).filter(Boolean))).sort(), [noticias]);
+      const categoriasNoticias = useMemo(() => Array.from(new Set(noticias.map(n => n.categoria).filter(Boolean))).sort(), [noticias]);
+      const noticiasFiltradas = useMemo(() => noticias.filter(n => {
+        const t = normalizar(newsSearch);
+        const okBusca = !t || normalizar(`${n.titulo} ${n.resumo} ${n.subtitulo}`).includes(t);
+        const okMuni = !newsMunicipio || n.municipio === newsMunicipio;
+        const okCat = !newsCategoria || n.categoria === newsCategoria;
+        const okDe = !newsDataDe || (n.data && n.data >= newsDataDe);
+        const okAte = !newsDataAte || (n.data && n.data <= newsDataAte);
+        return okBusca && okMuni && okCat && okDe && okAte;
+      }), [noticias, newsSearch, newsMunicipio, newsCategoria, newsDataDe, newsDataAte]);
+
+      const filteredEditais = useMemo(() => editais.filter(ed =>
+        (!filtroMuni || ed.municipio === filtroMuni) && (!filtroSit || ed.situacao === filtroSit)
+      ), [editais, filtroMuni, filtroSit]);
+      const editaisDoRelatorio = useMemo(() => relatorioMunicipio ? editais.filter(ed => ed.municipio === relatorioMunicipio) : [], [editais, relatorioMunicipio]);
+      const totalContratadoRelatorio = useMemo(() => editaisDoRelatorio.reduce((acc, ed) => acc + moedaParaNumero(ed.valorContrato), 0), [editaisDoRelatorio]);
+
+      const resultadosBusca = useMemo(() => {
+        const t = normalizar(globalSearch);
+        if (!t) return { municipios: [], editais: [], noticias: [] };
+        return {
+          municipios: MUNICIPIOS.filter(m => normalizar(`${m.nome} ${m.nutricionista}`).includes(t)),
+          editais: editais.filter(e => normalizar(`${e.numero} ${e.municipio} ${e.escola} ${e.contemplados}`).includes(t)).slice(0, 20),
+          noticias: noticias.filter(n => normalizar(`${n.titulo} ${n.resumo} ${n.municipio} ${n.categoria}`).includes(t)).slice(0, 20)
+        };
+      }, [globalSearch, editais, noticias]);
+      const totalResultados = resultadosBusca.municipios.length + resultadosBusca.editais.length + resultadosBusca.noticias.length;
+
+      const totalRepasse = MUNICIPIOS.reduce((acc, m) => acc + (m.valorContratado || 0), 0);
+      const totalAgricultores = MUNICIPIOS.reduce((acc, m) => acc + (m.agricultores || 0), 0);
+      const totalAlunos = MUNICIPIOS.reduce((acc, m) => acc + (m.alunosRedeMunicipal || 0), 0);
+
+      // ---- Carrossel da Home ----
+      const maxSlideIndex = Math.max(0, carouselNoticias.length - visibleCount);
+      useEffect(() => { if (activeSlide > maxSlideIndex) setActiveSlide(0); }, [maxSlideIndex]);
+      useEffect(() => {
+        if (isHovered || view !== 'home' || carouselNoticias.length <= visibleCount) return;
+        const it = setInterval(() => setActiveSlide(p => (p >= maxSlideIndex ? 0 : p + 1)), 4000);
+        return () => clearInterval(it);
+      }, [isHovered, visibleCount, carouselNoticias.length, view, maxSlideIndex]);
+      const nextSlide = () => { setActiveSlide(p => (p >= maxSlideIndex ? 0 : p + 1)); anunciar('Próximo slide de notícias'); };
+      const prevSlide = () => { setActiveSlide(p => (p <= 0 ? maxSlideIndex : p - 1)); anunciar('Slide anterior de notícias'); };
+
+      useEffect(() => {
+        if (isFeaturedHovered || view !== 'noticias' || ultimasTres.length <= 1) return;
+        const it = setInterval(() => setFeaturedSlideIndex(p => (p + 1) % ultimasTres.length), 5000);
+        return () => clearInterval(it);
+      }, [isFeaturedHovered, ultimasTres.length, view]);
+      useEffect(() => { if (featuredSlideIndex >= ultimasTres.length) setFeaturedSlideIndex(0); }, [ultimasTres.length]);
+
+      // ---- Contato (FormSubmit.co) ----
+      const handleContactSubmit = (e) => {
+        e.preventDefault();
+        if (!contatoNome || !contatoEmail || !contatoAssunto || !contatoMensagem) {
+          triggerToast('Preencha todos os campos obrigatórios.', 'error');
+          return;
+        }
+        setIsSendingContato(true);
+        fetch(`https://formsubmit.co/ajax/${CONFIG.EMAIL_CONTATO}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({
+            Nome: contatoNome,
+            Email: contatoEmail,
+            Telefone: contatoTelefone || '(não informado)',
+            Assunto: contatoAssunto,
+            Mensagem: contatoMensagem,
+            _subject: `[Observatório PNAE] ${contatoAssunto}`,
+            _template: 'table',
+            _captcha: 'false',
+            _replyto: contatoEmail
+          })
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success === 'true' || data.success === true) {
+              setFeedbackContato(true);
+              setContatoNome(''); setContatoEmail(''); setContatoTelefone(''); setContatoAssunto(''); setContatoMensagem('');
+            } else {
+              triggerToast('Não foi possível enviar a mensagem. Tente novamente.', 'error');
+            }
+          })
+          .catch(() => triggerToast('Não foi possível enviar a mensagem. Confira sua conexão.', 'error'))
+          .finally(() => setIsSendingContato(false));
+      };
+
+      // ---- Estilos ----
+      const themeBg = highContrast ? 'bg-black text-white' : 'bg-brand-cream text-brand-charcoal';
+      const headerBg = highContrast ? 'bg-zinc-900 border-b border-zinc-700 text-white' : 'bg-brand-primary text-white';
+      const footerBg = highContrast ? 'bg-zinc-900 border-t border-zinc-700 text-white' : 'bg-brand-charcoal text-slate-300';
+      const cardBg = highContrast ? 'bg-zinc-950 text-white border border-white' : 'bg-white shadow-md border border-brand-light';
+      const btnPrimary = highContrast ? 'bg-white text-black font-bold border-2 border-white' : 'bg-brand-brown hover:bg-brand-darkBrown text-white font-bold shadow-md transition-colors';
+
+      const logoUrl = CONFIG.LOGO_DRIVE_ID ? linkImagemDrive(CONFIG.LOGO_DRIVE_ID, 200) : null;
+
+      const navItems = ['home', 'editais', 'municipios', 'biblioteca', 'noticias', 'sobre'];
+
+      return (
+        <div className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${themeBg}`} style={{ fontSize: `${fontSize}px` }}>
+
+          <div className="sr-only" role="status" aria-live="polite">{srMensagem}</div>
+
+          {toast && (
+            <div className="fixed bottom-5 right-5 z-[80] bg-brand-charcoal text-white p-4 rounded-xl shadow-2xl border border-brand-green max-w-sm animate-fade-in">
+              <div className="flex items-center gap-2">
+                <span className={toast.type === 'error' ? 'text-red-400' : 'text-brand-yellow'}>●</span>
+                <p className="text-xs font-bold">{toast.message}</p>
+              </div>
+            </div>
+          )}
+
+          {imagemAmpliada && (
+            <div className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-4 sm:p-10 cursor-zoom-out" onClick={() => setImagemAmpliada(null)}>
+              <button onClick={() => setImagemAmpliada(null)} className="absolute top-4 right-4 sm:top-6 sm:right-6 text-white/80 hover:text-white text-3xl font-bold w-11 h-11 flex items-center justify-center rounded-full hover:bg-white/10" aria-label="Fechar">✕</button>
+              <img src={imagemAmpliada} alt="Imagem ampliada" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl cursor-default" onClick={(e) => e.stopPropagation()} />
+            </div>
+          )}
+
+          {/* ============ CABEÇALHO ============ */}
+          <header className={`${headerBg} sticky top-0 z-50 shadow-md transition-colors`}>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex items-center justify-between h-20">
+                <button className="flex items-center gap-3 text-left" onClick={() => irPara('home')} aria-label="Ir para o início">
+                  <div className="w-12 h-12 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center p-1 shadow border border-white/20">
+                    {logoUrl && !logoErro ? (
+                      <img src={logoUrl} alt="Logo Observatório PNAE" className="w-full h-full object-contain" onError={() => setLogoErro(true)} />
+                    ) : (
+                      <svg viewBox="0 0 100 100" className="w-full h-full" aria-hidden="true">
+                        <path d="M50 15C30 15 20 30 20 50C20 70 30 85 50 85C70 85 80 70 80 50C80 30 70 15 50 15ZM45 68L30 53L35 48L45 58L65 38L70 43L45 68Z" fill="#F6C044" />
+                      </svg>
+                    )}
+                  </div>
+                  <div>
+                    <span className="block text-base sm:text-lg font-extrabold tracking-tight">
+                      <span className="text-brand-yellow">OBSERVATÓRIO</span> PNAE
+                    </span>
+                    <span className="block text-[9px] uppercase tracking-widest text-brand-light">Baixo Sul da Bahia</span>
+                  </div>
+                </button>
+
+                <nav className="hidden lg:flex items-center space-x-2 font-bold text-base" aria-label="Menu principal">
+                  {navItems.map(v => (
+                    <button
+                      key={v}
+                      onClick={() => irPara(v)}
+                      aria-current={view === v ? 'page' : undefined}
+                      className={`px-3.5 py-2 rounded-lg transition-all duration-300 transform hover:scale-105 hover:-translate-y-0.5 active:scale-95 ${view === v ? 'bg-brand-darkBrown text-brand-yellow shadow-md' : 'hover:bg-brand-darkBrown/60 text-white'}`}
+                    >
+                      {VIEW_LABELS[v]}
+                    </button>
+                  ))}
+                </nav>
+
+                <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="lg:hidden p-2 rounded-md hover:bg-brand-darkBrown focus:outline-none" aria-label="Abrir menu" aria-expanded={mobileMenuOpen}>
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    {mobileMenuOpen
+                      ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {mobileMenuOpen && (
+              <div className="lg:hidden bg-brand-brown border-t border-brand-darkBrown px-4 py-4 space-y-1.5">
+                {navItems.map(v => (
+                  <button key={v} onClick={() => irPara(v)} className={`block w-full text-left px-3 py-2.5 rounded-lg hover:bg-brand-darkBrown ${view === v ? 'text-brand-yellow font-bold' : 'text-white'}`}>
+                    {VIEW_LABELS[v]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </header>
+
+          <div className="flex-grow flex flex-col min-w-0">
+
+            {/* Barra de acessibilidade */}
+            <div className="bg-brand-charcoal text-white text-[11px] py-2 px-4 sm:px-6 lg:px-8 shadow-sm flex flex-wrap justify-between items-center gap-2 shrink-0">
+              <div className="flex items-center gap-4">
+                <span className="font-bold tracking-wider text-brand-light">Acessibilidade:</span>
+                <button onClick={() => setHighContrast(!highContrast)} className="flex items-center gap-1 bg-neutral-700 py-1 px-2 rounded hover:bg-neutral-600">
+                  <span className="inline-block w-3 h-3 bg-white border border-black rounded-full"></span>
+                  {highContrast ? 'Desativar Alto Contraste' : 'Alto Contraste'}
+                </button>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={() => fontSize > 12 && setFontSize(fontSize - 2)} className="hover:bg-neutral-700 py-1 px-2.5 rounded font-bold" title="Diminuir fonte" aria-label="Diminuir fonte">A-</button>
+                <button onClick={() => setFontSize(16)} className="hover:bg-neutral-700 py-1 px-2 rounded text-brand-light" title="Tamanho padrão">Padrão</button>
+                <button onClick={() => fontSize < 22 && setFontSize(fontSize + 2)} className="hover:bg-neutral-700 py-1 px-2.5 rounded font-bold" title="Aumentar fonte" aria-label="Aumentar fonte">A+</button>
+                <span className="text-neutral-500">|</span>
+                <button
+                  onClick={() => { const el = document.getElementById('conteudo-principal'); if (el) { el.focus(); el.scrollIntoView({ behavior: 'smooth' }); } }}
+                  className="hover:underline text-brand-light"
+                >
+                  Ir para o conteúdo
+                </button>
+              </div>
+            </div>
+
+            {/* Trilha de navegação e status dos dados */}
+            <div className="bg-brand-light/20 py-3.5 px-4 sm:px-6 lg:px-8 border-b border-brand-light shrink-0">
+              <div className="max-w-7xl mx-auto text-xs flex flex-wrap justify-between items-center gap-2 text-brand-charcoal/80">
+                <div className="flex items-center gap-1.5">
+                  <button className="hover:underline text-brand-primary font-bold" onClick={() => irPara('home')}>Início</button>
+                  {view !== 'home' && (<><span>/</span><span className="font-semibold">{VIEW_LABELS[view]}</span></>)}
+                </div>
+                <div className="flex items-center gap-2">
+                  {statusEditais === 'carregando' ? (
+                    <span className="text-brand-charcoal/50 font-medium flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-brand-yellow inline-block animate-pulse"></span>
+                      Atualizando dados...
+                    </span>
+                  ) : statusEditais === 'ok' ? (
+                    <span className="text-brand-charcoal/50 font-medium flex items-center gap-1.5" title="Dados sincronizados com a base oficial do CIAPRA">
+                      <span className="w-1.5 h-1.5 rounded-full bg-brand-green inline-block"></span>
+                      Dados atualizados
+                    </span>
+                  ) : (
+                    <span className="text-brand-charcoal/40 font-medium">Base de dados temporariamente indisponível</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Busca global */}
+            <div className="bg-brand-light/40 py-3 px-4 sm:px-6 lg:px-8 shrink-0">
+              <div className="max-w-xl relative mx-auto lg:mx-0">
+                <label htmlFor="busca-global" className="sr-only">Pesquisar no Observatório</label>
+                <input
+                  id="busca-global"
+                  type="search"
+                  placeholder="Pesquisar municípios, editais ou notícias..."
+                  value={globalSearch}
+                  onChange={(e) => setGlobalSearch(e.target.value)}
+                  className="w-full pl-10 pr-16 py-2 rounded-full border border-brand-light focus:outline-none focus:ring-2 focus:ring-brand-primary bg-white text-brand-charcoal"
+                />
+                <span className="absolute left-3.5 top-2.5 text-brand-charcoal/50">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" /></svg>
+                </span>
+                {globalSearch && (
+                  <button onClick={() => setGlobalSearch('')} className="absolute right-3.5 top-2.5 text-brand-charcoal/70 hover:text-brand-charcoal font-bold text-sm">Limpar</button>
+                )}
+              </div>
+            </div>
+
+            <main id="conteudo-principal" tabIndex="-1" className="flex-grow outline-none">
+
+              {/* ============ RESULTADOS DA BUSCA ============ */}
+              {globalSearch.trim() && (
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+                  <h2 className="text-2xl font-bold mb-4 text-brand-brown">Resultados para "{globalSearch}"</h2>
+                  {totalResultados === 0 ? (
+                    <p className="text-sm text-brand-charcoal/60">Nada encontrado. Tente outro termo.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {resultadosBusca.municipios.map(m => (
+                        <div key={m.id} className={`${cardBg} p-4 rounded-lg`}>
+                          <span className="text-xs font-bold text-brand-yellow">MUNICÍPIO</span>
+                          <h3 className="text-lg font-bold text-brand-brown">{m.nome}</h3>
+                          <p className="text-sm text-brand-charcoal/80">Nutricionista: {m.nutricionista}</p>
+                          <button onClick={() => { irPara('municipios'); setSelectedMunicipio(m); }} className="text-brand-primary text-sm font-bold mt-2 hover:underline">Ver município →</button>
+                        </div>
+                      ))}
+                      {resultadosBusca.editais.map(ed => (
+                        <div key={ed.id} className={`${cardBg} p-4 rounded-lg`}>
+                          <span className="text-xs font-bold text-brand-green">EDITAL / CHAMADA PÚBLICA</span>
+                          <h3 className="text-base font-bold text-brand-brown">{ed.numero} — {ed.municipio}</h3>
+                          <p className="text-sm text-brand-charcoal/80">Fechamento: {ed.data} · {ed.situacao}</p>
+                          <button onClick={() => { irPara('editais'); setRelatorioMunicipio(ed.municipio); }} className="text-brand-primary text-sm font-bold mt-2 hover:underline">Ver editais do município →</button>
+                        </div>
+                      ))}
+                      {resultadosBusca.noticias.map(n => (
+                        <div key={n.id} className={`${cardBg} p-4 rounded-lg`}>
+                          <span className="text-xs font-bold text-brand-primary">NOTÍCIA</span>
+                          <h3 className="text-base font-bold text-brand-brown">{n.titulo}</h3>
+                          <p className="text-sm text-brand-charcoal/80 line-clamp-2">{n.resumo}</p>
+                          <button onClick={() => abrirNoticia(n)} className="text-brand-primary text-sm font-bold mt-2 hover:underline">Ler notícia →</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-6">
+                    <button onClick={() => setGlobalSearch('')} className={btnPrimary + ' py-2 px-6 rounded-full'}>Fechar busca</button>
+                  </div>
+                </div>
+              )}
+
+              {/* ============ INÍCIO ============ */}
+              {!globalSearch.trim() && view === 'home' && (
+                <div className="animate-fade-in">
+                  <section className="w-full">
+                    <div className="relative w-full overflow-hidden shadow-lg">
+                      <img
+                        src={CONFIG.CAPA_URL}
+                        alt="Capa do Observatório PNAE Baixo Sul"
+                        className="w-full h-auto object-cover block min-h-[220px] md:min-h-[380px] lg:max-h-[500px]"
+                      />
+                      <div className="absolute bottom-4 right-4 sm:bottom-6 sm:right-8 md:bottom-8 md:right-12 lg:bottom-10 lg:right-16 flex gap-2 sm:gap-3 justify-end">
+                        <button onClick={() => irPara('sobre')} className="bg-brand-yellow hover:bg-[#dfac34] text-brand-brown font-black px-4 sm:px-6 py-2 rounded-full shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 text-[10px] sm:text-xs md:text-sm">
+                          Rede PNAE
+                        </button>
+                        <button onClick={() => { irPara('editais'); setFiltroSit('Aberto'); }} className="bg-white hover:bg-brand-light text-brand-brown font-black px-4 sm:px-6 py-2 rounded-full shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 text-[10px] sm:text-xs md:text-sm border border-brand-brown/20">
+                          Chamadas Abertas
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="py-16 px-4 max-w-7xl mx-auto">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                      <div className="space-y-6">
+                        <div>
+                          <div className="w-12 h-1 bg-brand-yellow mb-4 rounded-full"></div>
+                          <h1 className="text-3xl font-black text-brand-brown tracking-tight">O que é o Observatório?</h1>
+                        </div>
+                        <p className="text-brand-charcoal text-base leading-relaxed">
+                          O <strong className="text-brand-brown font-extrabold">Observatório PNAE Baixo Sul</strong> é uma plataforma pública que reúne informações sobre a execução do Programa Nacional de Alimentação Escolar nos 16 municípios do território.
+                        </p>
+                        <p className="text-brand-charcoal text-base leading-relaxed">
+                          Nosso papel é integrar agricultores familiares, secretarias municipais, conselheiros, nutricionistas e a comunidade, facilitando a chegada de alimentos saudáveis às escolas e zelando pela transparência e pelo cumprimento da cota mínima de 45% para a agricultura familiar, em vigor desde 2026 (Lei nº 15.226/2025).
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                          <div className="p-4 border-l-4 border-brand-green bg-green-50/70 rounded-r-xl">
+                            <h2 className="font-extrabold text-brand-darkGreen text-base">Nutrição Forte</h2>
+                            <p className="text-xs text-brand-charcoal/90 mt-1">Cardápios mais saudáveis com alimentos locais frescos.</p>
+                          </div>
+                          <div className="p-4 border-l-4 border-brand-yellow bg-amber-50/70 rounded-r-xl">
+                            <h2 className="font-extrabold text-brand-brown text-base">Escoamento Rural</h2>
+                            <p className="text-xs text-brand-charcoal/90 mt-1">Compra direta de agricultores familiares e suas cooperativas.</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="relative rounded-3xl overflow-hidden shadow-xl border border-brand-light h-80 lg:h-full lg:min-h-[420px]">
+                        <Img src={CONFIG.IMAGEM_INTRO_URL} alt="Alimentação escolar saudável" className="absolute inset-0 w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/5 to-transparent"></div>
+                        <div className="absolute bottom-0 inset-x-0 p-6">
+                          <span className="text-base sm:text-lg text-white font-extrabold uppercase tracking-wider drop-shadow-lg">Produtos da Terra na Merenda</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Números do território */}
+                    <div className="mt-14">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-1.5 h-6 bg-brand-yellow rounded-full"></div>
+                        <h2 className="text-xl font-black text-brand-brown tracking-tight">Números do Território</h2>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-5">
+                        <div className="bg-brand-brown text-white p-6 rounded-2xl shadow-lg hover:-translate-y-1.5 transition-all duration-300 flex flex-col items-center text-center">
+                          <span className="text-4xl sm:text-5xl font-black leading-none">{MUNICIPIOS.length}</span>
+                          <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wide mt-2 text-brand-yellow">Municípios Integrados</span>
+                        </div>
+                        <div className="bg-brand-green text-white p-6 rounded-2xl shadow-lg hover:-translate-y-1.5 transition-all duration-300 flex flex-col items-center text-center">
+                          <span className="text-4xl sm:text-5xl font-black leading-none">{totalAgricultores.toLocaleString('pt-BR')}</span>
+                          <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wide mt-2 text-white/90">Agricultores Familiares Cadastrados (CAF)</span>
+                        </div>
+                        <div className="bg-brand-yellow text-brand-brown p-6 rounded-2xl shadow-lg hover:-translate-y-1.5 transition-all duration-300 flex flex-col items-center text-center">
+                          <span className="text-4xl sm:text-5xl font-black leading-none">R$ {(totalRepasse / 1000000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} M</span>
+                          <span className="text-[11px] sm:text-xs font-black uppercase tracking-wide mt-2 text-brand-brown/70">Total de Repasse PNAE 2025</span>
+                        </div>
+                        <div className="bg-brand-charcoal text-white p-6 rounded-2xl shadow-lg hover:-translate-y-1.5 transition-all duration-300 flex flex-col items-center text-center">
+                          <span className="text-4xl sm:text-5xl font-black leading-none">{totalAlunos.toLocaleString('pt-BR')}</span>
+                          <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wide mt-2 text-brand-light">Alunos Matriculados (Rede Municipal)</span>
+                        </div>
+                        <div className="col-span-2 sm:col-span-1 bg-white border-2 border-brand-green p-6 rounded-2xl shadow-lg hover:-translate-y-1.5 transition-all duration-300 flex flex-col items-center text-center">
+                          <span className="text-3xl sm:text-4xl font-black leading-none text-brand-green">
+                            R$ {(totalRepasse * 0.3 / 1000000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} M
+                          </span>
+                          <span className="text-[11px] sm:text-xs font-black uppercase tracking-wide mt-2 text-brand-brown">Cota Mínima Agricultura Familiar (30%) — 2025</span>
+                          <span className="text-[9px] text-brand-charcoal/50 mt-1.5 leading-snug">Cota vigente em 2025. A partir de 2026, o mínimo passa a 45% (Lei nº 15.226/2025).</span>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-brand-charcoal/50 mt-4">
+                        Fontes: FNDE (liberações PNAE 2025), MDA (CAF, jun/2026) e Inep (Sinopse Estatística da Educação Básica 2025).
+                      </p>
+                    </div>
+                  </section>
+
+                  {/* Notícias em carrossel */}
+                  <section
+                    className="bg-brand-cream py-16 border-t border-b border-brand-light/60 overflow-hidden relative"
+                    onMouseEnter={() => setIsHovered(true)}
+                    onMouseLeave={() => setIsHovered(false)}
+                  >
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                      <div className="flex justify-between items-end mb-8 gap-4">
+                        <div>
+                          <div className="w-12 h-1 bg-brand-green mb-3 rounded-full"></div>
+                          <h2 className="text-3xl font-black text-brand-brown tracking-tight">Notícias e Destaques</h2>
+                          <p className="text-brand-charcoal/70 text-sm mt-1">Acompanhe as últimas publicações sobre o PNAE no Baixo Sul.</p>
+                        </div>
+                        {maxSlideIndex > 0 && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button onClick={prevSlide} className="w-10 h-10 rounded-full border border-brand-light bg-white hover:bg-brand-light text-brand-brown flex items-center justify-center shadow-sm" aria-label="Slide anterior">‹</button>
+                            <button onClick={nextSlide} className="w-10 h-10 rounded-full border border-brand-light bg-white hover:bg-brand-light text-brand-brown flex items-center justify-center shadow-sm" aria-label="Próximo slide">›</button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="relative overflow-hidden w-full">
+                        {carouselNoticias.length > 0 ? (
+                          <div className="flex transition-transform duration-500 ease-out" style={{ transform: `translateX(-${activeSlide * (100 / visibleCount)}%)` }}>
+                            {carouselNoticias.map(item => (
+                              <div key={item.id} className="shrink-0 px-3" style={{ width: `${100 / visibleCount}%` }}>
+                                <CardNoticia item={item} onOpen={abrirNoticia} />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <EstadoVazio status={statusNoticias} vazio="As notícias aparecerão aqui em breve." erro="Não foi possível carregar as notícias agora. Tente novamente mais tarde." />
+                        )}
+                      </div>
+
+                      {maxSlideIndex > 0 && (
+                        <div className="flex justify-center items-center gap-2 mt-8">
+                          {Array.from({ length: maxSlideIndex + 1 }).map((_, idx) => (
+                            <button key={idx} onClick={() => setActiveSlide(idx)} className={`h-2 rounded-full transition-all duration-300 ${activeSlide === idx ? 'bg-brand-primary w-6' : 'bg-brand-light hover:bg-brand-charcoal/40 w-2'}`} aria-label={`Ir para slide ${idx + 1}`} />
+                          ))}
+                        </div>
+                      )}
+                      {noticias.length > 0 && (
+                        <div className="text-center mt-6">
+                          <button onClick={() => irPara('noticias')} className="text-sm font-bold text-brand-primary hover:underline">Ver todas as notícias →</button>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  {/* Acesso rápido */}
+                  <section className="bg-brand-light/30 py-16 px-4">
+                    <div className="max-w-7xl mx-auto mb-12">
+                      <div className="w-12 h-1 bg-brand-yellow mb-4 rounded-full"></div>
+                      <h2 className="text-3xl font-extrabold tracking-tight text-brand-brown">Canais de Acesso Rápido</h2>
+                      <p className="text-brand-charcoal/70 mt-2">Encontre facilmente as informações no nosso portal.</p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
+                      {[
+                        { v: 'editais', icone: '📄', titulo: 'Editais de Chamadas Públicas', texto: 'Consulte as chamadas públicas para fornecimento da alimentação escolar.' },
+                        { v: 'municipios', icone: '📍', titulo: 'Municípios & Nutricionistas', texto: 'Dados de repasse, alunos, agricultores e contato das nutricionistas responsáveis.' },
+                        { v: 'biblioteca', icone: '📚', titulo: 'Legislação e Manuais', texto: 'Leis, resoluções do FNDE e guias práticos para consulta e download.' }
+                      ].map(c => (
+                        <button key={c.v} onClick={() => irPara(c.v)} className="group bg-white p-7 rounded-2xl border border-brand-light shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 text-left">
+                          <div className="w-14 h-14 rounded-xl bg-brand-brown/10 flex items-center justify-center mb-5 text-2xl group-hover:bg-brand-yellow transition-colors">{c.icone}</div>
+                          <h3 className="font-bold text-lg text-brand-brown">{c.titulo}</h3>
+                          <p className="text-sm text-brand-charcoal/60 mt-2 leading-relaxed">{c.texto}</p>
+                          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-brown mt-5">Saiba mais →</span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                </div>
+              )}
+
+              {/* ============ EDITAIS ============ */}
+              {!globalSearch.trim() && view === 'editais' && (
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-fade-in">
+                  {relatorioMunicipio ? (
+                    <div className="space-y-8">
+                      <button onClick={() => setRelatorioMunicipio(null)} className="text-brand-brown font-black hover:underline">← Voltar para todos os editais</button>
+
+                      <div className="bg-white rounded-2xl border border-brand-light shadow-sm p-6 sm:p-8">
+                        <span className="text-[10px] font-black uppercase bg-brand-brown/10 text-brand-brown px-2.5 py-1 rounded tracking-wider">Relatório Municipal</span>
+                        <h2 className="text-2xl sm:text-3xl font-extrabold text-brand-brown mt-3">Editais de {relatorioMunicipio}</h2>
+                        <p className="text-brand-charcoal/60 text-sm mt-1">Consolidado das chamadas públicas registradas para este município no Observatório.</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
+                          <div className="bg-brand-cream p-4 rounded-xl border border-brand-light">
+                            <span className="text-[10px] font-bold text-brand-charcoal/50 uppercase block">Total de Editais</span>
+                            <span className="text-2xl font-black text-brand-brown">{editaisDoRelatorio.length}</span>
+                          </div>
+                          <div className="bg-brand-cream p-4 rounded-xl border border-brand-light">
+                            <span className="text-[10px] font-bold text-brand-charcoal/50 uppercase block">Abertos</span>
+                            <span className="text-2xl font-black text-brand-green">{editaisDoRelatorio.filter(e => e.situacao === 'Aberto').length}</span>
+                          </div>
+                          <div className="bg-brand-cream p-4 rounded-xl border border-brand-light">
+                            <span className="text-[10px] font-bold text-brand-charcoal/50 uppercase block">Encerrados</span>
+                            <span className="text-2xl font-black text-brand-charcoal/60">{editaisDoRelatorio.filter(e => e.situacao === 'Encerrado').length}</span>
+                          </div>
+                          <div className="bg-brand-cream p-4 rounded-xl border border-brand-light">
+                            <span className="text-[10px] font-bold text-brand-charcoal/50 uppercase block">Valor Total Contratado</span>
+                            <span className="text-base sm:text-lg font-black text-brand-brown">{formatarMoeda(totalContratadoRelatorio)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        {editaisDoRelatorio.map(ed => (
+                          <div key={ed.id} className="bg-white rounded-2xl border border-brand-light shadow-sm p-6">
+                            <div className="flex flex-wrap justify-between items-start gap-3 mb-4 pb-4 border-b border-brand-light">
+                              <div>
+                                <h3 className="font-extrabold text-brand-brown text-lg">{ed.numero}</h3>
+                                {ed.escola && <p className="text-xs text-brand-charcoal/60 mt-1">{ed.escola}</p>}
+                              </div>
+                              <span className={`text-[10px] font-black uppercase px-3 py-1 rounded-full shrink-0 ${ed.situacao === 'Aberto' ? 'bg-brand-green/20 text-brand-green' : 'bg-brand-light text-brand-charcoal/60'}`}>{ed.situacao}</span>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                              {[
+                                ['Data de Lançamento', ed.dataLancamento],
+                                ['Data de Fechamento', ed.data],
+                                ['Vigência', ed.vigencia],
+                                ['Valor do Edital', ed.valorEdital],
+                                ['Valor do Contrato Assinado', ed.valorContrato],
+                                ['Nº do Contrato', ed.numeroContrato],
+                                ['Famílias da AF Beneficiadas', ed.familiasBeneficiadas],
+                                ['Alunos Beneficiados', ed.alunosBeneficiados]
+                              ].map(([rotulo, valor]) => (
+                                <div key={rotulo}>
+                                  <span className="text-[9px] font-bold text-brand-charcoal/50 uppercase block">{rotulo}</span>
+                                  <span className="text-xs font-bold text-brand-charcoal">{valor || '—'}</span>
+                                </div>
+                              ))}
+                            </div>
+                            {ed.contemplados && (
+                              <div className="mt-4 pt-4 border-t border-brand-light">
+                                <span className="text-[9px] font-bold text-brand-charcoal/50 uppercase block mb-1">Empreendimento(s) / Agricultor(es) Contemplado(s)</span>
+                                <span className="text-xs text-brand-charcoal">{ed.contemplados}</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {editaisDoRelatorio.length === 0 && (
+                          <div className="bg-white rounded-2xl border border-brand-light p-12 text-center text-brand-charcoal/50 text-sm">Nenhum edital registrado para este município.</div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="border-b border-brand-light pb-6 mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                          <h1 className="text-3xl font-extrabold tracking-tight text-brand-brown">Editais e Chamadas Públicas</h1>
+                          <p className="text-brand-charcoal/70 mt-1">Chamadas públicas da alimentação escolar registradas pelo CIAPRA nos municípios do território.</p>
+                        </div>
+                        <div className="flex bg-brand-light/30 rounded-xl p-1 shrink-0 shadow-inner">
+                          <button onClick={() => setVisualizacaoEditais('cards')} className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${visualizacaoEditais === 'cards' ? 'bg-white text-brand-brown shadow' : 'text-brand-charcoal/75'}`}>📇 Cartões</button>
+                          <button onClick={() => setVisualizacaoEditais('tabela')} className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${visualizacaoEditais === 'tabela' ? 'bg-white text-brand-brown shadow' : 'text-brand-charcoal/75'}`}>📋 Tabela</button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-4 mb-8">
+                        <div className="bg-white p-4 rounded-xl border border-brand-light shadow-sm">
+                          <span className="text-xs text-brand-charcoal/50 block font-bold uppercase">Total de Chamadas</span>
+                          <span className="text-2xl font-black text-brand-brown">{filteredEditais.length}</span>
+                        </div>
+                        <div className="bg-white p-4 rounded-xl border border-brand-light shadow-sm">
+                          <span className="text-xs text-brand-charcoal/50 block font-bold uppercase">Chamadas Abertas</span>
+                          <span className="text-2xl font-black text-brand-green">{filteredEditais.filter(e => e.situacao === 'Aberto').length}</span>
+                        </div>
+                        <div className="bg-white p-4 rounded-xl border border-brand-light shadow-sm">
+                          <span className="text-xs text-brand-charcoal/50 block font-bold uppercase">Municípios</span>
+                          <span className="text-2xl font-black text-brand-brown">{new Set(filteredEditais.map(e => e.municipio)).size}</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-white p-6 rounded-2xl border border-brand-light shadow-sm mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label htmlFor="filtro-muni" className="block text-xs font-bold text-brand-charcoal uppercase mb-2">Município</label>
+                          <select id="filtro-muni" value={filtroMuni} onChange={(e) => setFiltroMuni(e.target.value)} className="w-full border border-brand-light rounded-lg p-2.5 bg-brand-cream text-brand-charcoal font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary">
+                            <option value="">Todos os municípios</option>
+                            {Array.from(new Set(editais.map(e => e.municipio))).sort((a, b) => a.localeCompare(b, 'pt-BR')).map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label htmlFor="filtro-sit" className="block text-xs font-bold text-brand-charcoal uppercase mb-2">Situação</label>
+                          <select id="filtro-sit" value={filtroSit} onChange={(e) => setFiltroSit(e.target.value)} className="w-full border border-brand-light rounded-lg p-2.5 bg-brand-cream text-brand-charcoal font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary">
+                            <option value="">Todas as situações</option>
+                            <option value="Aberto">Aberto</option>
+                            <option value="Encerrado">Encerrado</option>
+                          </select>
+                        </div>
+                        <div className="flex items-end">
+                          <button onClick={() => { setFiltroMuni(''); setFiltroSit(''); }} className="w-full bg-brand-light hover:bg-brand-light/70 text-brand-charcoal/80 font-black p-2.5 rounded-lg text-xs transition-colors">Limpar filtros</button>
+                        </div>
+                      </div>
+
+                      {filteredEditais.length === 0 ? (
+                        <div className="bg-white rounded-2xl border border-brand-light">
+                          <EstadoVazio
+                            status={statusEditais}
+                            vazio={editais.length === 0 ? 'Nenhum edital registrado até o momento.' : 'Nenhum edital encontrado com os filtros selecionados.'}
+                            erro="Não foi possível carregar os editais agora. Tente novamente em alguns minutos."
+                          />
+                        </div>
+                      ) : visualizacaoEditais === 'cards' ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {filteredEditais.map(ed => (
+                            <div key={ed.id} className="bg-white rounded-2xl border border-brand-light hover:border-brand-primary/50 shadow-sm hover:shadow-xl transition-all duration-300 p-6 flex flex-col justify-between min-h-[16rem]">
+                              <div className="space-y-3">
+                                <div className="flex justify-between items-center gap-2">
+                                  <span className="text-[10px] bg-brand-brown/10 text-brand-brown px-2 py-0.5 rounded font-black tracking-wider uppercase">{ed.municipio}</span>
+                                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${ed.situacao === 'Aberto' ? 'bg-brand-green/20 text-brand-green' : 'bg-brand-light text-brand-charcoal/60'}`}>{ed.situacao}</span>
+                                </div>
+                                <h3 className="font-extrabold text-brand-brown text-base line-clamp-2">{ed.numero}</h3>
+                                <div className="text-[11px] text-brand-charcoal/70 font-bold">⏳ Vigência: {ed.vigencia}</div>
+                                <div className="text-[11px] text-brand-charcoal/70 font-bold">💰 Valor do Contrato: <span className="text-brand-brown">{ed.valorContrato}</span></div>
+                              </div>
+                              <div className="border-t border-brand-light/60 pt-4 mt-4 flex justify-between items-center gap-2">
+                                <div>
+                                  <span className="text-[9px] text-brand-charcoal/50 block font-bold uppercase">Data de Fechamento</span>
+                                  <span className="text-xs font-extrabold text-brand-charcoal">{ed.data}</span>
+                                </div>
+                                <button onClick={() => setRelatorioMunicipio(ed.municipio)} className="px-4 py-2 bg-brand-brown hover:bg-brand-darkBrown text-white rounded-lg text-xs font-extrabold shadow-sm transition-all">Ver detalhes</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="bg-white rounded-2xl border border-brand-light shadow-sm overflow-hidden">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                              <thead>
+                                <tr className="bg-brand-charcoal text-white text-xs uppercase tracking-wider">
+                                  <th className="p-4">Município</th>
+                                  <th className="p-4">Nº do Edital</th>
+                                  <th className="p-4">Vigência</th>
+                                  <th className="p-4">Fechamento</th>
+                                  <th className="p-4">Valor do Contrato</th>
+                                  <th className="p-4">Situação</th>
+                                  <th className="p-4 text-center">Ações</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-brand-light text-sm">
+                                {filteredEditais.map(ed => (
+                                  <tr key={ed.id} className="hover:bg-brand-cream transition">
+                                    <td className="p-4 font-bold text-brand-charcoal">{ed.municipio}</td>
+                                    <td className="p-4 font-mono text-xs text-brand-brown font-bold">{ed.numero}</td>
+                                    <td className="p-4 text-xs text-brand-charcoal/80">{ed.vigencia}</td>
+                                    <td className="p-4 font-semibold text-xs">{ed.data}</td>
+                                    <td className="p-4 text-xs font-bold text-brand-charcoal/80">{ed.valorContrato}</td>
+                                    <td className="p-4">
+                                      <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold ${ed.situacao === 'Aberto' ? 'bg-brand-green/20 text-brand-green' : 'bg-brand-light text-brand-charcoal/60'}`}>{ed.situacao}</span>
+                                    </td>
+                                    <td className="p-4 text-center">
+                                      <button onClick={() => setRelatorioMunicipio(ed.municipio)} className="bg-brand-brown/10 hover:bg-brand-brown/20 text-brand-primary py-1.5 px-3 rounded text-xs font-bold">Visualizar</button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ============ MUNICÍPIOS ============ */}
+              {!globalSearch.trim() && view === 'municipios' && (
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-fade-in">
+                  {selectedMunicipio ? (
+                    <div className="bg-white rounded-2xl shadow-xl overflow-hidden grid grid-cols-1 lg:grid-cols-12 border border-brand-light">
+                      <div className="lg:col-span-5 relative h-72 lg:h-full min-h-[300px] bg-brand-brown">
+                        {selectedMunicipio.fotoNutricionista ? (
+                          <button className="absolute inset-0 w-full h-full group" onClick={() => setImagemAmpliada(selectedMunicipio.fotoNutricionista)} aria-label="Ampliar foto">
+                            <Img src={selectedMunicipio.fotoNutricionista} alt={`Foto de ${selectedMunicipio.nutricionista}`} className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-105" />
+                          </button>
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <Img src={selectedMunicipio.logo} alt={`Brasão de ${selectedMunicipio.nome}`} className="w-40 h-40 object-contain bg-white rounded-full p-4 shadow-xl" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-brand-charcoal via-brand-charcoal/20 to-transparent pointer-events-none"></div>
+                        <div className="absolute bottom-6 left-6 right-6 flex items-center gap-3 pointer-events-none">
+                          {selectedMunicipio.logo && (
+                            <div className="w-14 h-14 rounded-full bg-white border-2 border-white shadow-lg flex items-center justify-center overflow-hidden shrink-0">
+                              <Img src={selectedMunicipio.logo} alt="" className="w-full h-full object-contain p-1.5" />
+                            </div>
+                          )}
+                          <h1 className="text-3xl font-extrabold text-white">{selectedMunicipio.nome}</h1>
+                        </div>
+                      </div>
+                      <div className="lg:col-span-7 p-6 sm:p-8 space-y-6">
+                        <h2 className="text-xl font-bold text-brand-brown">O município no PNAE</h2>
+                        <p className="text-brand-charcoal/80 text-sm">{selectedMunicipio.descricao}</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-brand-cream p-4 rounded-xl border border-brand-light">
+                          <div>
+                            <span className="text-[10px] text-brand-charcoal/60 font-bold uppercase">Valor Total Repassado (PNAE 2025)</span>
+                            <span className="text-xl font-black block text-brand-brown">{formatarMoeda(selectedMunicipio.valorContratado)}</span>
+                            <span className="text-[9px] text-brand-charcoal/40 block mt-0.5">Fonte: FNDE, consulta de liberações do PNAE 2025.</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-brand-charcoal/60 font-bold uppercase">Agricultores Familiares (CAF)</span>
+                            <span className="text-xl font-black block text-brand-brown">{selectedMunicipio.agricultores.toLocaleString('pt-BR')}</span>
+                            <span className="text-[9px] text-brand-charcoal/40 block mt-0.5">Fonte: MDA, Cadastro Nacional da Agricultura Familiar, jun/2026.</span>
+                          </div>
+                          <div className="sm:col-span-2 border-t border-brand-light/70 pt-3">
+                            <span className="text-[10px] text-brand-charcoal/60 font-bold uppercase">Alunos Matriculados na Rede Municipal</span>
+                            <span className="text-xl font-black block text-brand-brown">{selectedMunicipio.alunosRedeMunicipal.toLocaleString('pt-BR')} alunos</span>
+                            <span className="text-[9px] text-brand-charcoal/40 block mt-0.5">Fonte: Sinopse Estatística da Educação Básica 2025, Inep/Educacenso.</span>
+                          </div>
+                          <div className="sm:col-span-2 border-t border-brand-light/70 pt-3 bg-brand-green/5 -mx-4 -mb-4 px-4 pb-4 rounded-b-xl">
+                            <span className="text-[10px] text-brand-green font-bold uppercase">Cota Mínima para Agricultura Familiar (30%, vigente em 2025)</span>
+                            <span className="text-xl font-black block text-brand-green">{formatarMoeda(selectedMunicipio.valorContratado * 0.3)}</span>
+                            <span className="text-[9px] text-brand-charcoal/50 block mt-0.5">
+                              Calculado sobre o repasse de 2025, conforme o Art. 14 da Lei nº 11.947/2009 vigente naquele ano. A partir de 2026 o mínimo passa a 45% (Lei nº 15.226/2025). É a meta legal, não necessariamente o valor efetivamente comprado da agricultura familiar.
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="border border-brand-light rounded-xl overflow-hidden">
+                          <button onClick={() => setMostrarDetalhamentoFNDE(p => !p)} className="w-full flex items-center justify-between gap-2 p-3 bg-brand-cream hover:bg-brand-light/60 transition-colors text-left" aria-expanded={mostrarDetalhamentoFNDE}>
+                            <span className="text-xs font-bold text-brand-brown">📊 {mostrarDetalhamentoFNDE ? 'Ocultar' : 'Ver'} detalhamento dos repasses (FNDE)</span>
+                            <span className={`text-brand-charcoal/50 transition-transform ${mostrarDetalhamentoFNDE ? 'rotate-180' : ''}`}>▼</span>
+                          </button>
+                          {mostrarDetalhamentoFNDE && (
+                            <div className="p-3 space-y-2 bg-white">
+                              <p className="text-[10px] text-brand-charcoal/50">
+                                Consulta oficial do FNDE — selecione "{selectedMunicipio.nome}" no menu de município. Se a consulta aparecer em branco, use o link abaixo.
+                              </p>
+                              <div className="rounded-lg border border-brand-light overflow-hidden bg-brand-cream">
+                                <iframe src={CONFIG.FNDE_URL} title={`Repasses do FNDE - ${selectedMunicipio.nome}`} className="w-full border-0" style={{ height: '520px' }}></iframe>
+                              </div>
+                              <a href={CONFIG.FNDE_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-primary hover:underline">↗ Abrir no site do FNDE</a>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="border-t border-brand-light pt-4 flex items-center gap-3">
+                          {selectedMunicipio.fotoNutricionista && (
+                            <Img src={selectedMunicipio.fotoNutricionista} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-brand-light shrink-0" />
+                          )}
+                          <div>
+                            <span className="text-[10px] text-brand-charcoal/50 font-bold uppercase block">Nutricionista Responsável Técnica</span>
+                            <h3 className="font-bold text-brand-brown">{selectedMunicipio.nutricionista}</h3>
+                            <p className="text-xs text-brand-charcoal/60">
+                              {selectedMunicipio.registro}
+                              {selectedMunicipio.email && selectedMunicipio.email !== '—' && (
+                                <> · <a href={`mailto:${selectedMunicipio.email}`} className="hover:underline">{selectedMunicipio.email}</a></>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          <button onClick={() => setSelectedMunicipio(null)} className="bg-brand-light hover:bg-brand-light/70 font-bold py-2 px-6 rounded-lg text-xs transition-colors">← Voltar para a lista</button>
+                          {editais.some(e => e.municipio === selectedMunicipio.nome) && (
+                            <button onClick={() => { const nome = selectedMunicipio.nome; irPara('editais'); setRelatorioMunicipio(nome); }} className={btnPrimary + ' py-2 px-6 rounded-lg text-xs'}>Ver editais do município</button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-12">
+                      <div className="border-b border-brand-light pb-6">
+                        <h1 className="text-3xl font-extrabold tracking-tight text-brand-brown">Municípios Consorciados</h1>
+                        <p className="text-brand-charcoal/70 mt-2">Clique nos pinos do mapa ou nos brasões para ver os dados de cada município.</p>
+                      </div>
+                      <div className="flex flex-col lg:flex-row gap-8 items-stretch">
+                        <div className="w-full lg:w-[45%] bg-white p-5 rounded-2xl border border-brand-light shadow-sm text-center shrink-0 flex flex-col">
+                          <h2 className="text-xs font-black text-brand-charcoal/50 uppercase tracking-wider mb-4">Mapa CIAPRA Baixo Sul</h2>
+                          <div className="relative border border-brand-light bg-brand-cream rounded-xl mx-auto overflow-hidden shadow-inner w-full">
+                            <Img src={CONFIG.MAPA_URL} alt="Mapa dos municípios do CIAPRA Baixo Sul" className="w-full h-auto object-cover block" />
+                            {MUNICIPIOS.map(m => (
+                              <button
+                                key={m.id}
+                                onClick={() => setSelectedMunicipio(m)}
+                                className="absolute w-4 h-4 bg-brand-yellow border-2 border-white rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-125 focus:outline-none focus:ring-2 focus:ring-brand-primary pulse-pin"
+                                style={{ left: `${m.coord_x}%`, top: `${m.coord_y}%`, transform: 'translate(-50%, -50%)' }}
+                                title={m.nome}
+                                aria-label={`Ver dados de ${m.nome}`}
+                              >
+                                <span className="w-1 h-1 bg-brand-brown rounded-full"></span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="w-full lg:w-[55%] flex flex-col">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                            {[...MUNICIPIOS].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).map(m => (
+                              <button key={m.id} onClick={() => setSelectedMunicipio(m)} title={m.nome} className="bg-white border border-brand-light p-4 rounded-xl hover:border-brand-yellow hover:shadow-md transition-all text-center flex flex-col items-center justify-center gap-2">
+                                <div className="w-16 h-16 rounded-full bg-brand-cream border border-brand-light flex items-center justify-center overflow-hidden shrink-0">
+                                  <Img src={m.logo} alt={`Brasão de ${m.nome}`} className="w-full h-full object-contain p-1.5" />
+                                </div>
+                                <span className="text-[11px] font-bold text-brand-brown leading-tight">{m.nome}</span>
+                                <span className="text-[9px] bg-brand-green/10 text-brand-green px-1.5 py-0.5 rounded font-bold">{m.meta30Porcento}% AF</span>
+                              </button>
+                            ))}
+                          </div>
+                          <p className="text-[10px] text-brand-charcoal/50 mt-4 leading-relaxed">
+                            "% AF": percentual de investimento na agricultura familiar declarado por cada prefeitura, consolidado pelo CIAPRA.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ============ BIBLIOTECA ============ */}
+              {!globalSearch.trim() && view === 'biblioteca' && (
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-fade-in">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center mb-14">
+                    <div className="space-y-4">
+                      <div className="w-12 h-1 bg-brand-yellow rounded-full"></div>
+                      <h1 className="text-3xl font-extrabold tracking-tight text-brand-brown">Legislação e Manuais</h1>
+                      <p className="text-brand-charcoal/80 leading-relaxed">
+                        Leis, resoluções e manuais que orientam a execução do PNAE no Baixo Sul da Bahia — da Lei nº 11.947/2009 e da Lei nº 15.226/2025 aos guias práticos de chamada pública da agricultura familiar. O acervo é atualizado continuamente pelo CIAPRA.
+                      </p>
+                      <p className="text-brand-charcoal/80 leading-relaxed">Clique em um arquivo para visualizar aqui mesmo ou baixe para consulta offline.</p>
+                    </div>
+                    <div className="relative rounded-3xl overflow-hidden shadow-xl border border-brand-light h-64 lg:h-80">
+                      <Img src="https://images.unsplash.com/photo-1481627834876-b7833e8f5570?auto=format&fit=crop&w=1000&q=80" alt="Acervo de legislação e manuais" className="absolute inset-0 w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/5 to-transparent"></div>
+                      <div className="absolute bottom-0 inset-x-0 p-5">
+                        <span className="text-sm text-white font-extrabold uppercase tracking-wider drop-shadow">Acervo Técnico e Normativo</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
+                    <h2 className="text-xl font-black text-brand-brown">Arquivos Disponíveis</h2>
+                    <a href={`https://drive.google.com/drive/folders/${CONFIG.PASTA_BIBLIOTECA_ID}`} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-brand-primary hover:underline">📂 Abrir a pasta no Google Drive →</a>
+                  </div>
+
+                  {CONFIG.DRIVE_API_KEY && !bibliotecaErro ? (
+                    <>
+                      {bibliotecaPilha.length > 1 && (
+                        <div className="flex flex-wrap items-center gap-1.5 mb-4 text-xs">
+                          {bibliotecaPilha.map((pasta, idx) => (
+                            <React.Fragment key={pasta.id}>
+                              {idx > 0 && <span className="text-brand-charcoal/30">/</span>}
+                              <button
+                                onClick={() => voltarParaPasta(idx)}
+                                disabled={idx === bibliotecaPilha.length - 1}
+                                className={idx === bibliotecaPilha.length - 1 ? 'font-bold text-brand-brown cursor-default' : 'font-bold text-brand-primary hover:underline'}
+                              >
+                                {idx === 0 ? '📂 ' : '📁 '}{pasta.name}
+                              </button>
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      )}
+                      <div className="relative mb-6">
+                        <label htmlFor="busca-biblioteca" className="sr-only">Buscar arquivo</label>
+                        <input id="busca-biblioteca" type="search" value={bibliotecaBusca} onChange={(e) => setBibliotecaBusca(e.target.value)} placeholder="Buscar por nome do arquivo ou pasta..." className="w-full pl-11 pr-4 py-3 rounded-xl border border-brand-light focus:outline-none focus:ring-2 focus:ring-brand-primary bg-white text-brand-charcoal shadow-sm" />
+                        <span className="absolute left-4 top-3.5 text-brand-charcoal/40">🔍</span>
+                      </div>
+
+                      {isLoadingBiblioteca ? (
+                        <div className="text-center py-16 text-brand-charcoal/50 text-sm">Carregando arquivos da Biblioteca...</div>
+                      ) : bibliotecaFiltrada.length === 0 ? (
+                        <div className="text-center py-16 text-brand-charcoal/50 text-sm">
+                          {bibliotecaBusca ? `Nada encontrado para "${bibliotecaBusca}".` : 'Nenhum arquivo nesta pasta ainda.'}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+                          {bibliotecaFiltrada.map(item => (
+                            item.mimeType === DRIVE_FOLDER_MIME ? (
+                              <button key={item.id} onClick={() => entrarNaPasta(item)} className={`${cardBg} p-5 rounded-2xl flex flex-col items-center justify-center gap-2 hover:shadow-lg hover:-translate-y-1 transition-all text-center`}>
+                                <span className="text-4xl">📁</span>
+                                <h3 className="font-bold text-brand-brown text-sm leading-snug break-words">{item.name}</h3>
+                                <span className="text-[10px] text-brand-charcoal/50 font-bold uppercase">Abrir pasta</span>
+                              </button>
+                            ) : (
+                              <div key={item.id} className={`${cardBg} p-5 rounded-2xl flex flex-col justify-between hover:shadow-lg transition-all`}>
+                                <div className="flex flex-col items-center text-center gap-2">
+                                  <span className="text-4xl">{iconeArquivo(item.mimeType)}</span>
+                                  <h3 className="font-bold text-brand-brown text-sm leading-snug break-words">{item.name}</h3>
+                                  {formatarTamanho(item.size) && <span className="text-[10px] text-brand-charcoal/50 font-bold uppercase">{formatarTamanho(item.size)}</span>}
+                                </div>
+                                <div className="border-t border-brand-light pt-3 mt-4 flex flex-col gap-2">
+                                  <button onClick={() => setPreviewFile(item)} className="bg-brand-cream hover:bg-brand-light text-brand-charcoal font-bold text-xs py-2 rounded-lg transition-colors">👁 Visualizar</button>
+                                  <a href={`https://drive.google.com/uc?export=download&id=${item.id}`} target="_blank" rel="noopener noreferrer" className={btnPrimary + ' text-center text-xs py-2 rounded-lg'}>⬇ Baixar</a>
+                                </div>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    // Alternativa sem chave de API (ou se a API falhar): pasta do Drive incorporada
+                    <div className="bg-white rounded-2xl border border-brand-light shadow-md overflow-hidden">
+                      <iframe src={`https://drive.google.com/embeddedfolderview?id=${CONFIG.PASTA_BIBLIOTECA_ID}#grid`} title="Arquivos da Biblioteca (Google Drive)" className="w-full border-0" style={{ height: '600px' }}></iframe>
+                    </div>
+                  )}
+
+                  {previewFile && (
+                    <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 sm:p-8" onClick={() => setPreviewFile(null)}>
+                      <div className="bg-white rounded-2xl w-full max-w-4xl h-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between p-4 border-b border-brand-light shrink-0">
+                          <h3 className="font-bold text-brand-brown text-sm truncate pr-4">{iconeArquivo(previewFile.mimeType)} {previewFile.name}</h3>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <a href={`https://drive.google.com/uc?export=download&id=${previewFile.id}`} target="_blank" rel="noopener noreferrer" className={btnPrimary + ' text-xs py-2 px-4 rounded-lg'}>⬇ Baixar</a>
+                            <button onClick={() => setPreviewFile(null)} className="text-brand-charcoal/60 hover:text-brand-charcoal text-xl font-bold px-2" aria-label="Fechar">✕</button>
+                          </div>
+                        </div>
+                        <iframe src={`https://drive.google.com/file/d/${previewFile.id}/preview`} className="flex-grow w-full border-0" title={previewFile.name} allow="autoplay"></iframe>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ============ NOTÍCIAS ============ */}
+              {!globalSearch.trim() && view === 'noticias' && (
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-fade-in">
+                  {selectedNoticia ? (
+                    <div className="space-y-8 max-w-4xl mx-auto">
+                      <button onClick={() => setSelectedNoticia(null)} className="text-brand-brown font-black hover:underline">← Voltar para Notícias</button>
+                      <article className="bg-white rounded-3xl shadow-xl overflow-hidden border border-brand-light">
+                        <Img src={selectedNoticia.imagem} alt={selectedNoticia.titulo} className="w-full h-64 sm:h-96 object-cover" />
+                        <div className="p-6 sm:p-8 space-y-6">
+                          <div className="flex flex-wrap justify-between items-center gap-2 border-b border-brand-light pb-4">
+                            <div className="flex flex-wrap gap-2">
+                              <span className="text-xs font-black text-brand-darkGreen bg-brand-green/10 px-3 py-1 rounded-full uppercase">{selectedNoticia.municipio}</span>
+                              <span className="text-xs font-black text-brand-brown bg-brand-yellow/20 px-3 py-1 rounded-full uppercase">{selectedNoticia.categoria}</span>
+                            </div>
+                            <p className="text-[11px] text-brand-charcoal/50 font-medium">
+                              {selectedNoticia.data ? `Publicado em ${isoParaBR(selectedNoticia.data)} · ` : ''}{selectedNoticia.autor}
+                            </p>
+                          </div>
+                          <h1 className="text-3xl md:text-4xl font-extrabold text-brand-brown leading-tight">{selectedNoticia.titulo}</h1>
+                          {selectedNoticia.subtitulo && <p className="text-base text-brand-charcoal/70 -mt-3">{selectedNoticia.subtitulo}</p>}
+                          {selectedNoticia.resumo && <p className="font-semibold text-lg text-brand-brown">{selectedNoticia.resumo}</p>}
+                          <div className="conteudo-noticia text-brand-charcoal text-sm sm:text-base leading-relaxed" dangerouslySetInnerHTML={{ __html: prepararConteudo(selectedNoticia.conteudo) }} />
+                          {selectedNoticia.galeria.length > 0 && (
+                            <div className="pt-6 border-t border-brand-light">
+                              <h2 className="font-bold text-brand-brown text-base mb-3">Galeria de Fotos</h2>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                {selectedNoticia.galeria.map((img, idx) => (
+                                  <button key={idx} onClick={() => setImagemAmpliada(img)} className="relative rounded-lg overflow-hidden h-32 w-full shadow-sm hover:scale-105 transition-all" aria-label={`Ampliar foto ${idx + 1}`}>
+                                    <Img src={img} alt={`Foto ${idx + 1} da galeria`} className="absolute inset-0 w-full h-full object-cover" />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    </div>
+                  ) : (
+                    <div className="space-y-12">
+                      {ultimasTres.length > 0 && (
+                        <section onMouseEnter={() => setIsFeaturedHovered(true)} onMouseLeave={() => setIsFeaturedHovered(false)}>
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="w-1.5 h-6 bg-brand-yellow rounded-full"></div>
+                            <h1 className="text-2xl font-black text-brand-brown tracking-tight">Últimas Notícias</h1>
+                          </div>
+                          <div className="relative rounded-3xl overflow-hidden shadow-xl border border-brand-light bg-brand-charcoal min-h-[320px] sm:min-h-[420px]">
+                            {ultimasTres.map((item, idx) => (
+                              <div key={item.id} className={`transition-opacity duration-700 ${idx === featuredSlideIndex ? 'opacity-100 relative' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
+                                <Img src={item.imagem} alt={item.titulo} className="absolute inset-0 w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"></div>
+                                <div className="relative z-10 flex flex-col justify-end min-h-[320px] sm:min-h-[420px] p-6 sm:p-10">
+                                  <div className="flex flex-wrap gap-2 mb-3">
+                                    <span className="text-[10px] font-black uppercase bg-brand-yellow text-brand-brown px-3 py-1 rounded-full tracking-wider">{item.categoria}</span>
+                                    <span className="text-[10px] font-black uppercase bg-white/90 text-brand-brown px-3 py-1 rounded-full tracking-wider">📍 {item.municipio}</span>
+                                  </div>
+                                  <h2 className="text-xl sm:text-3xl font-extrabold text-white leading-tight max-w-3xl">{item.titulo}</h2>
+                                  <p className="text-white/80 text-sm mt-2 max-w-2xl line-clamp-2">{item.resumo}</p>
+                                  <div className="flex items-center gap-4 mt-5">
+                                    <button onClick={() => setSelectedNoticia(item)} className="bg-brand-yellow hover:bg-white text-brand-brown font-black text-xs px-5 py-2.5 rounded-full shadow-lg transition-all">Ler notícia completa</button>
+                                    <span className="text-white/60 text-xs font-semibold">{isoParaBR(item.data)}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            {ultimasTres.length > 1 && (
+                              <div className="absolute bottom-4 right-6 z-20 flex gap-2">
+                                {ultimasTres.map((_, idx) => (
+                                  <button key={idx} onClick={() => setFeaturedSlideIndex(idx)} className={`h-2 rounded-full transition-all ${idx === featuredSlideIndex ? 'bg-brand-yellow w-6' : 'bg-white/50 hover:bg-white/80 w-2'}`} aria-label={`Ir para destaque ${idx + 1}`} />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </section>
+                      )}
+
+                      <section className="bg-white p-6 rounded-2xl border border-brand-light shadow-sm space-y-4">
+                        <h2 className="text-xs font-black text-brand-charcoal/60 uppercase tracking-wider">Buscar Notícias</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <div>
+                            <label htmlFor="news-busca" className="block text-[10px] font-bold text-brand-charcoal/60 uppercase mb-1">Palavra-chave</label>
+                            <input id="news-busca" type="text" value={newsSearch} onChange={(e) => setNewsSearch(e.target.value)} placeholder="Ex: horta, cooperativa..." className="w-full border border-brand-light rounded-lg p-2.5 bg-brand-cream text-brand-charcoal text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary" />
+                          </div>
+                          <div>
+                            <label htmlFor="news-muni" className="block text-[10px] font-bold text-brand-charcoal/60 uppercase mb-1">Município</label>
+                            <select id="news-muni" value={newsMunicipio} onChange={(e) => setNewsMunicipio(e.target.value)} className="w-full border border-brand-light rounded-lg p-2.5 bg-brand-cream text-brand-charcoal text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary">
+                              <option value="">Todos</option>
+                              {municipiosNoticias.map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label htmlFor="news-cat" className="block text-[10px] font-bold text-brand-charcoal/60 uppercase mb-1">Assunto</label>
+                            <select id="news-cat" value={newsCategoria} onChange={(e) => setNewsCategoria(e.target.value)} className="w-full border border-brand-light rounded-lg p-2.5 bg-brand-cream text-brand-charcoal text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary">
+                              <option value="">Todos</option>
+                              {categoriasNoticias.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label htmlFor="news-de" className="block text-[10px] font-bold text-brand-charcoal/60 uppercase mb-1">De</label>
+                              <input id="news-de" type="date" value={newsDataDe} onChange={(e) => setNewsDataDe(e.target.value)} className="w-full border border-brand-light rounded-lg p-2 bg-brand-cream text-brand-charcoal text-xs focus:outline-none focus:ring-2 focus:ring-brand-primary" />
+                            </div>
+                            <div>
+                              <label htmlFor="news-ate" className="block text-[10px] font-bold text-brand-charcoal/60 uppercase mb-1">Até</label>
+                              <input id="news-ate" type="date" value={newsDataAte} onChange={(e) => setNewsDataAte(e.target.value)} className="w-full border border-brand-light rounded-lg p-2 bg-brand-cream text-brand-charcoal text-xs focus:outline-none focus:ring-2 focus:ring-brand-primary" />
+                            </div>
+                          </div>
+                        </div>
+                        {(newsSearch || newsMunicipio || newsCategoria || newsDataDe || newsDataAte) && (
+                          <div className="flex justify-between items-center pt-2 border-t border-brand-light/60">
+                            <span className="text-xs text-brand-charcoal/60 font-semibold">{noticiasFiltradas.length} notícia(s) encontrada(s)</span>
+                            <button onClick={() => { setNewsSearch(''); setNewsMunicipio(''); setNewsCategoria(''); setNewsDataDe(''); setNewsDataAte(''); }} className="text-xs font-bold text-brand-primary hover:underline">Limpar filtros</button>
+                          </div>
+                        )}
+                      </section>
+
+                      <section>
+                        <div className="flex items-center gap-3 mb-6">
+                          <div className="w-1.5 h-6 bg-brand-green rounded-full"></div>
+                          <h2 className="text-2xl font-black text-brand-brown tracking-tight">Todas as Notícias</h2>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {noticiasFiltradas.map(item => <CardNoticia key={item.id} item={item} onOpen={abrirNoticia} />)}
+                          {noticiasFiltradas.length === 0 && (
+                            <EstadoVazio
+                              status={statusNoticias}
+                              vazio={noticias.length === 0 ? 'Nenhuma notícia publicada ainda.' : 'Nenhuma notícia encontrada com os filtros selecionados.'}
+                              erro="Não foi possível carregar as notícias agora. Tente novamente mais tarde."
+                            />
+                          )}
+                        </div>
+                      </section>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ============ SOBRE A REDE ============ */}
+              {!globalSearch.trim() && view === 'sobre' && (
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-16 animate-fade-in">
+                  <div className="max-w-4xl mx-auto space-y-8">
+                    <h1 className="text-3xl font-extrabold text-brand-brown">Sobre a Rede PNAE Baixo Sul</h1>
+                    <p className="text-brand-charcoal/80 leading-relaxed">
+                      A Rede de Alimentação Escolar Saudável do Baixo Sul da Bahia reúne os 16 municípios consorciados ao CIAPRA em torno da melhoria da alimentação oferecida nas escolas. Com acompanhamento técnico e articulação entre prefeituras, nutricionistas e organizações da agricultura familiar, a rede busca garantir alimentos frescos para os estudantes e renda para os produtores do território.
+                    </p>
+                    <div className="p-6 bg-brand-brown text-white rounded-2xl shadow">
+                      <h2 className="text-lg font-bold mb-2 text-brand-yellow">Atuação do CIAPRA</h2>
+                      <p className="text-sm text-brand-light">
+                        O Consórcio Intermunicipal do Mosaico das APAs do Baixo Sul (CIAPRA) faz a gestão da integração territorial, apoia as cooperativas e associações na regularização documental e assessora as prefeituras nas chamadas públicas do PNAE.
+                      </p>
+                    </div>
+                  </div>
+
+                  <section className="grid grid-cols-1 lg:grid-cols-12 gap-12 bg-white p-6 sm:p-8 md:p-12 rounded-3xl border border-brand-light shadow-sm">
+                    <div className="lg:col-span-5 space-y-6">
+                      <h2 className="text-2xl font-bold text-brand-brown">Fale Conosco</h2>
+                      <p className="text-brand-charcoal/80 text-sm">Dúvidas sobre editais, cadastro da sua associação de produtores ou sugestões? Escreva para nós.</p>
+                      <div className="space-y-4 text-sm text-brand-charcoal">
+                        <div className="flex items-start gap-3"><span className="font-bold text-brand-green">📍</span><p>Sede do CIAPRA Baixo Sul<br />{CONFIG.ENDERECO}</p></div>
+                        <div className="flex items-start gap-3"><span className="font-bold text-brand-green">📞</span><p>{CONFIG.TELEFONE_CONTATO}</p></div>
+                        <div className="flex items-start gap-3"><span className="font-bold text-brand-green">✉</span><a href={`mailto:${CONFIG.EMAIL_CONTATO}`} className="hover:underline break-all">{CONFIG.EMAIL_CONTATO}</a></div>
+                      </div>
+                      <div className="rounded-2xl overflow-hidden border border-brand-light shadow-sm">
+                        <iframe src={`https://www.google.com/maps?q=${CONFIG.MAPS_COORD}&z=17&output=embed`} title="Localização da sede do CIAPRA em Ituberá" className="w-full border-0" style={{ height: '260px' }} loading="lazy" referrerPolicy="no-referrer-when-downgrade"></iframe>
+                      </div>
+                      <a href={`https://www.google.com/maps?q=${CONFIG.MAPS_COORD}`} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-brand-primary hover:underline">📍 Abrir no Google Maps →</a>
+                    </div>
+
+                    <div className="lg:col-span-7">
+                      {feedbackContato ? (
+                        <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-2xl text-center space-y-4">
+                          <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-2xl mx-auto">✓</div>
+                          <h3 className="font-extrabold text-emerald-900">Mensagem enviada com sucesso!</h3>
+                          <p className="text-sm text-emerald-800">Sua mensagem foi encaminhada à equipe do CIAPRA. Retornaremos em breve.</p>
+                          <button onClick={() => setFeedbackContato(false)} className="text-xs font-bold text-emerald-800 hover:underline">Enviar outra mensagem</button>
+                        </div>
+                      ) : (
+                        <form onSubmit={handleContactSubmit} className="space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                              <label htmlFor="c-nome" className="block text-xs font-bold text-brand-charcoal uppercase mb-1">Seu nome *</label>
+                              <input id="c-nome" type="text" required value={contatoNome} onChange={(e) => setContatoNome(e.target.value)} className="w-full border border-brand-light rounded-lg p-2.5 bg-brand-cream text-brand-charcoal text-sm focus:ring-2 focus:ring-brand-green" />
+                            </div>
+                            <div>
+                              <label htmlFor="c-email" className="block text-xs font-bold text-brand-charcoal uppercase mb-1">Seu e-mail *</label>
+                              <input id="c-email" type="email" required value={contatoEmail} onChange={(e) => setContatoEmail(e.target.value)} className="w-full border border-brand-light rounded-lg p-2.5 bg-brand-cream text-brand-charcoal text-sm focus:ring-2 focus:ring-brand-green" />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                              <label htmlFor="c-tel" className="block text-xs font-bold text-brand-charcoal uppercase mb-1">Telefone</label>
+                              <input id="c-tel" type="tel" value={contatoTelefone} onChange={(e) => setContatoTelefone(e.target.value)} placeholder="(73) 99999-9999" className="w-full border border-brand-light rounded-lg p-2.5 bg-brand-cream text-brand-charcoal text-sm focus:ring-2 focus:ring-brand-green" />
+                            </div>
+                            <div>
+                              <label htmlFor="c-assunto" className="block text-xs font-bold text-brand-charcoal uppercase mb-1">Assunto *</label>
+                              <input id="c-assunto" type="text" required value={contatoAssunto} onChange={(e) => setContatoAssunto(e.target.value)} className="w-full border border-brand-light rounded-lg p-2.5 bg-brand-cream text-brand-charcoal text-sm focus:ring-2 focus:ring-brand-green" />
+                            </div>
+                          </div>
+                          <div>
+                            <label htmlFor="c-msg" className="block text-xs font-bold text-brand-charcoal uppercase mb-1">Sua mensagem *</label>
+                            <textarea id="c-msg" rows="5" required value={contatoMensagem} onChange={(e) => setContatoMensagem(e.target.value)} className="w-full border border-brand-light rounded-lg p-2.5 bg-brand-cream text-brand-charcoal text-sm focus:ring-2 focus:ring-brand-green"></textarea>
+                          </div>
+                          <button type="submit" disabled={isSendingContato} className={btnPrimary + ' w-full py-3 rounded-lg font-bold disabled:opacity-60 disabled:cursor-not-allowed'}>
+                            {isSendingContato ? 'Enviando...' : 'Enviar mensagem'}
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              )}
+            </main>
+
+            {/* Parceiros */}
+            <section className="bg-brand-light/20 border-t border-brand-light py-14 px-4">
+              <div className="max-w-5xl mx-auto text-center space-y-8">
+                <div>
+                  <h2 className="text-xl font-bold text-brand-brown">Parceiros Institucionais</h2>
+                  <p className="text-brand-charcoal/70 text-xs mt-1">Instituições que tornam o Observatório uma realidade.</p>
+                </div>
+                <div className="flex flex-wrap justify-center items-stretch gap-5 sm:gap-6">
+                  {[
+                    ['https://i.postimg.cc/VNqSB7m6/logo-CAR.png', 'CAR'],
+                    ['https://i.postimg.cc/N06y7NB5/logo-instituo-arapyau.png', 'Instituto Arapyaú'],
+                    ['https://i.postimg.cc/SK6X7Zkx/logo-PARQUE-CIENTIFICO.png', 'Parque Científico']
+                  ].map(([src, nome]) => (
+                    <div key={nome} className="bg-white border border-brand-light rounded-2xl shadow-sm hover:shadow-md transition-all p-6 w-44 sm:w-52 h-28 sm:h-32 flex items-center justify-center">
+                      <img src={src} alt={`Logo ${nome}`} className="max-h-full max-w-full object-contain" loading="lazy" onError={(e) => { e.target.style.display = 'none'; }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <footer className={`${footerBg} py-8 border-t text-center text-xs mt-auto shrink-0`}>
+              <p>© {new Date().getFullYear()} Observatório PNAE Baixo Sul da Bahia — CIAPRA. Todos os direitos reservados.</p>
+            </footer>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
