@@ -341,17 +341,26 @@
       return {
         municipio: idx(h => h.includes('municipio')),
         escola: idx(h => h.includes('escola')),
-        numeroEdital: idx(h => h.includes('edital') && !h.includes('valor')),
+        numeroEdital: idx(h => h.includes('edital') && !h.includes('valor') && !ehColunaLink(h)),
+        linkEdital: idx(h => ehColunaLink(h)),
         dataLancamento: idx(h => h.includes('lancamento')),
         dataFechamento: idx(h => h.includes('fechamento')),
         vigencia: idx(h => h.includes('vigencia')),
         valorEdital: idx(h => h.includes('valor') && h.includes('edital')),
         contemplados: idx(h => h.includes('contempl')),
-        numeroContrato: idx(h => h.includes('contrato') && !h.includes('valor')),
+        numeroContrato: idx(h => h.includes('contrato') && !h.includes('valor') && !ehColunaLink(h)),
         valorContrato: idx(h => h.includes('valor') && h.includes('contrato')),
         familiasBeneficiadas: idx(h => h.includes('familia')),
         alunosBeneficiados: idx(h => h.includes('aluno'))
       };
+    };
+    // Coluna com o link do edital completo (ex.: "LINK DO EDITAL", "URL", "EDITAL COMPLETO")
+    const ehColunaLink = (h) => h.includes('link') || h.includes('url') || h.includes('completo');
+    const normalizarLink = (bruto) => {
+      const s = String(bruto || '').trim();
+      if (/^https?:\/\//i.test(s)) return s;
+      if (/^(www\.|drive\.|docs\.)/i.test(s)) return 'https://' + s;
+      return '';
     };
     const IGNORAR_MUNICIPIO = ['estado da bahia', 'total', 'municipios'];
     const processarEditais = (linhas) => {
@@ -389,6 +398,7 @@
           familiasBeneficiadas: get('familiasBeneficiadas'),
           alunosBeneficiados: get('alunosBeneficiados'),
           situacao: situacaoPorData(dtFech),
+          linkEdital: normalizarLink(get('linkEdital')),
           ano
         });
       });
@@ -529,6 +539,170 @@
         </div>
       </div>
     ); }
+
+    // ---- Visualização de dados ----
+    const moedaCompacta = (v) => {
+      if (!v && v !== 0) return '';
+      if (Math.abs(v) >= 1e6) return `R$ ${(v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mi`;
+      if (Math.abs(v) >= 1e4) return `R$ ${Math.round(v / 1e3).toLocaleString('pt-BR')} mil`;
+      return `R$ ${Math.round(v).toLocaleString('pt-BR')}`;
+    };
+
+    function LinkEdital({ href, compacto }) {
+      if (!href) return null;
+      return (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          title="Abrir o edital completo em nova aba"
+          aria-label="Abrir o edital completo em nova aba"
+          className={compacto
+            ? 'inline-flex items-center gap-1 h-9 px-3 rounded-lg border border-brand-green/50 text-brand-darkGreen hover:bg-brand-green/10 text-xs font-extrabold transition-colors whitespace-nowrap'
+            : 'inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-green/10 text-brand-darkGreen hover:bg-brand-green/20 text-xs font-extrabold transition-colors'}
+        >
+          {compacto ? 'Edital' : 'Edital completo'}<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 3h7v7"/><path d="M10 14 21 3"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg>
+        </a>
+      );
+    }
+
+    function IndicadorTile({ cor, icone, rotulo, valor, nota }) {
+      return (
+        <div className="bg-white rounded-2xl border border-brand-light shadow-sm hover:shadow-md transition-shadow p-5 flex gap-4 items-start relative overflow-hidden">
+          <span className="absolute left-0 top-0 bottom-0 w-1.5" style={{ backgroundColor: cor }} aria-hidden="true"></span>
+          <span className="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0" style={{ backgroundColor: cor + '1A' }} aria-hidden="true">{icone}</span>
+          <div className="min-w-0">
+            <span className="block text-xs font-bold text-brand-charcoal/70">{rotulo}</span>
+            <span className="block text-3xl font-black text-brand-brown leading-tight mt-1 whitespace-nowrap">{valor}</span>
+            <span className="block text-[11px] text-brand-charcoal/55 mt-1 leading-snug">{nota}</span>
+          </div>
+        </div>
+      );
+    }
+
+    const METRICAS_COMPARATIVO = [
+      { key: 'valorContratado', rotulo: 'Repasse PNAE 2025', valor: (m) => m.valorContratado, fmt: (v) => moedaCompacta(v), fonte: 'FNDE, liberações do PNAE 2025' },
+      { key: 'porAluno', rotulo: 'Repasse por aluno', valor: (m) => m.valorContratado / m.alunosRedeMunicipal, fmt: (v) => moedaCompacta(v), fonte: 'Repasse FNDE 2025 ÷ alunos da rede municipal (Inep 2025)' },
+      { key: 'alunosRedeMunicipal', rotulo: 'Alunos', valor: (m) => m.alunosRedeMunicipal, fmt: (v) => v.toLocaleString('pt-BR'), fonte: 'Inep, Sinopse Estatística da Educação Básica 2025' },
+      { key: 'agricultores', rotulo: 'Agricultores (CAF)', valor: (m) => m.agricultores, fmt: (v) => v.toLocaleString('pt-BR'), fonte: 'MDA, Cadastro Nacional da Agricultura Familiar, jun/2026' },
+      { key: 'meta30Porcento', rotulo: '% na agricultura familiar', valor: (m) => m.meta30Porcento, fmt: (v) => `${v}%`, referencias: [30, 45], escalaMin: 50, fonte: 'Percentual declarado pelas prefeituras, consolidado pelo CIAPRA. Linhas: mínimo legal de 30% (até 2025) e 45% (desde 2026)' }
+    ];
+
+    function ComparativoMunicipios({ onSelect }) {
+      const [metricaKey, setMetricaKey] = useState('valorContratado');
+      const [hover, setHover] = useState(null);
+      const [verTabela, setVerTabela] = useState(false);
+      const metrica = METRICAS_COMPARATIVO.find(x => x.key === metricaKey);
+      const linhas = useMemo(() => MUNICIPIOS
+        .map(m => ({ m, v: metrica.valor(m) }))
+        .sort((a, b) => b.v - a.v), [metricaKey]);
+      const max = Math.max(metrica.escalaMin || 0, ...linhas.map(l => l.v));
+      const pct = (v) => `${Math.max(0, (v / max) * 100)}%`;
+
+      return (
+        <div className="bg-white rounded-2xl border border-brand-light shadow-sm p-5 sm:p-7">
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-5">
+            <div>
+              <h2 className="text-xl font-black text-brand-brown tracking-tight">Comparativo entre municípios</h2>
+              <p className="text-sm text-brand-charcoal/70 mt-1">{metrica.rotulo}, do maior para o menor. Passe o mouse para ver todos os dados; clique para abrir a ficha.</p>
+            </div>
+            <button onClick={() => setVerTabela(!verTabela)} className="self-start md:self-auto text-xs font-bold text-brand-primary border border-brand-light rounded-lg px-3 py-2 hover:bg-brand-cream">
+              {verTabela ? '📊 Ver gráfico' : '📋 Ver tabela'}
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-2 mb-6" role="tablist" aria-label="Escolha o indicador">
+            {METRICAS_COMPARATIVO.map(x => (
+              <button
+                key={x.key}
+                role="tab"
+                aria-selected={x.key === metricaKey}
+                onClick={() => setMetricaKey(x.key)}
+                className={`text-xs font-bold px-3 py-2 rounded-full border transition-colors ${x.key === metricaKey ? 'bg-brand-brown text-white border-brand-brown' : 'bg-white text-brand-charcoal border-brand-light hover:border-brand-brown/40'}`}
+              >
+                {x.rotulo}
+              </button>
+            ))}
+          </div>
+
+          {verTabela ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead>
+                  <tr className="text-[11px] uppercase tracking-wide text-brand-charcoal/60 border-b border-brand-light">
+                    <th className="py-2 pr-3">Município</th>
+                    {METRICAS_COMPARATIVO.map(x => <th key={x.key} className="py-2 px-3 text-right">{x.rotulo}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {linhas.map(({ m }) => (
+                    <tr key={m.id} className="border-b border-brand-light/60 hover:bg-brand-cream cursor-pointer" onClick={() => onSelect(m)}>
+                      <td className="py-2 pr-3 font-bold text-brand-brown">{m.nome}</td>
+                      {METRICAS_COMPARATIVO.map(x => <td key={x.key} className="py-2 px-3 text-right tabular-nums text-brand-charcoal">{x.fmt(x.valor(m))}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="space-y-0.5" role="list">
+              {metrica.referencias && (
+                <div className="grid grid-cols-[7.5rem_1fr_4.5rem] sm:grid-cols-[10rem_1fr_5.5rem] gap-3 h-5 text-[10px] font-bold text-brand-charcoal/60">
+                  <span></span>
+                  <div className="relative">
+                    {metrica.referencias.map(r => (
+                      <span key={r} className="absolute -translate-x-1/2 bottom-0" style={{ left: pct(r) }}>mín. {r}%</span>
+                    ))}
+                  </div>
+                  <span></span>
+                </div>
+              )}
+              {linhas.map(({ m, v }) => {
+                const ativo = hover === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    role="listitem"
+                    onClick={() => onSelect(m)}
+                    onMouseEnter={() => setHover(m.id)}
+                    onMouseLeave={() => setHover(null)}
+                    onFocus={() => setHover(m.id)}
+                    onBlur={() => setHover(null)}
+                    aria-label={`${m.nome}: ${metrica.fmt(v)}`}
+                    className="relative w-full grid grid-cols-[7.5rem_1fr_4.5rem] sm:grid-cols-[10rem_1fr_5.5rem] gap-3 items-center py-1.5 rounded-lg hover:bg-brand-cream focus:outline-none focus:ring-2 focus:ring-brand-yellow text-left"
+                  >
+                    <span className={`text-xs truncate ${ativo ? 'font-black text-brand-brown' : 'font-semibold text-brand-charcoal'}`}>{m.nome}</span>
+                    <span className="relative h-4 border-l border-brand-charcoal/30">
+                      {(metrica.referencias || []).map(r => (
+                        <span key={r} className="absolute top-[-6px] bottom-[-6px] border-l border-dashed border-brand-charcoal/50" style={{ left: pct(r) }} aria-hidden="true"></span>
+                      ))}
+                      <span
+                        className="absolute left-0 top-0 h-full rounded-r-[4px] transition-all duration-500"
+                        style={{ width: pct(v), backgroundColor: ativo ? '#52291D' : '#327025' }}
+                      ></span>
+                      {ativo && (
+                        <span className="hidden sm:block absolute z-30 top-1/2 -translate-y-1/2 bg-brand-charcoal text-white rounded-xl shadow-xl p-3 w-60 pointer-events-none text-left" role="tooltip" style={(v / max) > 0.55 ? { right: `calc(${100 - (v / max) * 100}% + 10px)` } : { left: `calc(${pct(v)} + 10px)` }}>
+                          <span className="block text-sm font-black text-brand-yellow mb-1">{m.nome}</span>
+                          {METRICAS_COMPARATIVO.map(x => (
+                            <span key={x.key} className={`flex justify-between gap-3 text-[11px] ${x.key === metricaKey ? 'font-black' : 'text-white/80'}`}>
+                              <span>{x.rotulo}</span><span className="tabular-nums">{x.fmt(x.valor(m))}</span>
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-xs font-bold text-brand-charcoal text-right tabular-nums">{metrica.fmt(v)}</span>
+
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <p className="text-[10px] text-brand-charcoal/55 mt-4">Fonte: {metrica.fonte}.</p>
+        </div>
+      );
+    }
 
     const viewFromHash = () => {
       const h = window.location.hash.replace('#', '').split('/')[0];
@@ -1083,34 +1257,19 @@
                         <div className="w-1.5 h-6 bg-brand-yellow rounded-full"></div>
                         <h2 className="text-xl font-black text-brand-brown tracking-tight">Números do Território</h2>
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-5">
-                        <div className="bg-brand-brown text-white p-6 rounded-2xl shadow-lg hover:-translate-y-1.5 transition-all duration-300 flex flex-col items-center text-center">
-                          <span className="text-4xl sm:text-5xl font-black leading-none">{MUNICIPIOS.length}</span>
-                          <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wide mt-2 text-brand-yellow">Municípios Integrados</span>
-                        </div>
-                        <div className="bg-brand-green text-white p-6 rounded-2xl shadow-lg hover:-translate-y-1.5 transition-all duration-300 flex flex-col items-center text-center">
-                          <span className="text-4xl sm:text-5xl font-black leading-none">{totalAgricultores.toLocaleString('pt-BR')}</span>
-                          <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wide mt-2 text-white/90">Agricultores Familiares Cadastrados (CAF)</span>
-                        </div>
-                        <div className="bg-brand-yellow text-brand-brown p-6 rounded-2xl shadow-lg hover:-translate-y-1.5 transition-all duration-300 flex flex-col items-center text-center">
-                          <span className="text-4xl sm:text-5xl font-black leading-none">R$ {(totalRepasse / 1000000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} M</span>
-                          <span className="text-[11px] sm:text-xs font-black uppercase tracking-wide mt-2 text-brand-brown/70">Total de Repasse PNAE 2025</span>
-                        </div>
-                        <div className="bg-brand-charcoal text-white p-6 rounded-2xl shadow-lg hover:-translate-y-1.5 transition-all duration-300 flex flex-col items-center text-center">
-                          <span className="text-4xl sm:text-5xl font-black leading-none">{totalAlunos.toLocaleString('pt-BR')}</span>
-                          <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wide mt-2 text-brand-light">Alunos Matriculados (Rede Municipal)</span>
-                        </div>
-                        <div className="col-span-2 sm:col-span-1 bg-white border-2 border-brand-green p-6 rounded-2xl shadow-lg hover:-translate-y-1.5 transition-all duration-300 flex flex-col items-center text-center">
-                          <span className="text-3xl sm:text-4xl font-black leading-none text-brand-green">
-                            R$ {(totalRepasse * 0.3 / 1000000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} M
-                          </span>
-                          <span className="text-[11px] sm:text-xs font-black uppercase tracking-wide mt-2 text-brand-brown">Cota Mínima Agricultura Familiar (30%) — 2025</span>
-                          <span className="text-[9px] text-brand-charcoal/50 mt-1.5 leading-snug">Cota vigente em 2025. A partir de 2026, o mínimo passa a 45% (Lei nº 15.226/2025).</span>
-                        </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <IndicadorTile cor="#52291D" icone="🏛️" rotulo="Municípios integrados" valor={String(MUNICIPIOS.length)} nota="Consorciados ao CIAPRA no Baixo Sul" />
+                        <IndicadorTile cor="#4B4D4F" icone="🎓" rotulo="Alunos na rede municipal" valor={totalAlunos.toLocaleString('pt-BR')} nota="Inep, Sinopse da Educação Básica 2025" />
+                        <IndicadorTile cor="#327025" icone="🌱" rotulo="Agricultores familiares (CAF)" valor={totalAgricultores.toLocaleString('pt-BR')} nota="MDA, Cadastro da Agricultura Familiar, jun/2026" />
+                        <IndicadorTile cor="#C98A0B" icone="💰" rotulo="Repasse PNAE 2025" valor={moedaCompacta(totalRepasse)} nota={`${formatarMoeda(totalRepasse)} · FNDE`} />
+                        <IndicadorTile cor="#C98A0B" icone="🍽️" rotulo="Repasse médio por aluno" valor={moedaCompacta(totalRepasse / totalAlunos)} nota="Por aluno da rede municipal, no ano de 2025" />
+                        <IndicadorTile cor="#327025" icone="🤝" rotulo="Meta mínima para a agricultura familiar" valor={moedaCompacta(totalRepasse * 0.3)} nota="30% do repasse de 2025. Desde 2026 o mínimo é 45% (Lei nº 15.226/2025)" />
                       </div>
-                      <p className="text-[10px] text-brand-charcoal/50 mt-4">
-                        Fontes: FNDE (liberações PNAE 2025), MDA (CAF, jun/2026) e Inep (Sinopse Estatística da Educação Básica 2025).
-                      </p>
+                    </div>
+
+                    {/* Comparativo entre municípios */}
+                    <div className="mt-14">
+                      <ComparativoMunicipios onSelect={(m) => { irPara('municipios'); setSelectedMunicipio(m); }} />
                     </div>
                   </section>
 
@@ -1228,7 +1387,10 @@
                                 <h3 className="font-extrabold text-brand-brown text-lg">{ed.numero}</h3>
                                 {ed.escola && <p className="text-xs text-brand-charcoal/60 mt-1">{ed.escola}</p>}
                               </div>
-                              <span className={`text-[10px] font-black uppercase px-3 py-1 rounded-full shrink-0 ${ed.situacao === 'Aberto' ? 'bg-brand-green/20 text-brand-green' : 'bg-brand-light text-brand-charcoal/60'}`}>{ed.situacao}</span>
+                              <div className="flex items-center gap-3 shrink-0">
+                                <LinkEdital href={ed.linkEdital} />
+                                <span className={`text-[10px] font-black uppercase px-3 py-1 rounded-full ${ed.situacao === 'Aberto' ? 'bg-brand-green/20 text-brand-darkGreen' : 'bg-brand-light text-brand-charcoal/60'}`}>{ed.situacao}</span>
+                              </div>
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                               {[
@@ -1309,6 +1471,10 @@
                         </div>
                       </div>
 
+                      <p className="text-[11px] text-brand-charcoal/60 -mt-4 mb-6">
+                        A situação é calculada automaticamente pela <strong>Data de Fechamento</strong> da planilha: o edital fica <strong>Aberto</strong> até o fim do dia de fechamento e passa a <strong>Encerrado</strong> no dia seguinte.
+                      </p>
+
                       {filteredEditais.length === 0 ? (
                         <div className="bg-white rounded-2xl border border-brand-light">
                           <EstadoVazio
@@ -1335,7 +1501,10 @@
                                   <span className="text-[9px] text-brand-charcoal/50 block font-bold uppercase">Data de Fechamento</span>
                                   <span className="text-xs font-extrabold text-brand-charcoal">{ed.data}</span>
                                 </div>
-                                <button onClick={() => setRelatorioMunicipio(ed.municipio)} className="px-4 py-2 bg-brand-brown hover:bg-brand-darkBrown text-white rounded-lg text-xs font-extrabold shadow-sm transition-all">Ver detalhes</button>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <LinkEdital href={ed.linkEdital} compacto />
+                                  <button onClick={() => setRelatorioMunicipio(ed.municipio)} className="px-4 py-2 bg-brand-brown hover:bg-brand-darkBrown text-white rounded-lg text-xs font-extrabold shadow-sm transition-all">Ver detalhes</button>
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -1352,6 +1521,7 @@
                                   <th className="p-4">Fechamento</th>
                                   <th className="p-4">Valor do Contrato</th>
                                   <th className="p-4">Situação</th>
+                                  <th className="p-4 text-center">Edital</th>
                                   <th className="p-4 text-center">Ações</th>
                                 </tr>
                               </thead>
@@ -1365,6 +1535,9 @@
                                     <td className="p-4 text-xs font-bold text-brand-charcoal/80">{ed.valorContrato}</td>
                                     <td className="p-4">
                                       <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold ${ed.situacao === 'Aberto' ? 'bg-brand-green/20 text-brand-green' : 'bg-brand-light text-brand-charcoal/60'}`}>{ed.situacao}</span>
+                                    </td>
+                                    <td className="p-4 text-center">
+                                      {ed.linkEdital ? <LinkEdital href={ed.linkEdital} compacto /> : <span className="text-brand-charcoal/30">—</span>}
                                     </td>
                                     <td className="p-4 text-center">
                                       <button onClick={() => setRelatorioMunicipio(ed.municipio)} className="bg-brand-brown/10 hover:bg-brand-brown/20 text-brand-primary py-1.5 px-3 rounded text-xs font-bold">Visualizar</button>
