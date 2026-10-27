@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Observatório PNAE Baixo Sul</title>
   <meta name="description" content="Plataforma pública de transparência sobre a execução do Programa Nacional de Alimentação Escolar (PNAE) nos 16 municípios do Baixo Sul da Bahia. Iniciativa do CIAPRA.">
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
   <meta name="theme-color" content="#52291D">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Observatório PNAE Baixo Sul da Bahia">
@@ -215,7 +216,8 @@
         const m = str.match(p);
         if (m && m[1]) return linkImagemDrive(m[1]);
       }
-      return str;
+      // Força https para não gerar o aviso "Não seguro" no navegador
+      return str.replace(/^http:\/\//i, 'https://');
     };
 
     // ---- Datas ----
@@ -367,7 +369,7 @@
     const ehColunaLink = (h) => h.includes('link') || h.includes('url') || h.includes('completo');
     const normalizarLink = (bruto) => {
       const s = String(bruto || '').trim();
-      if (/^https?:\/\//i.test(s)) return s;
+      if (/^https?:\/\//i.test(s)) return s.replace(/^http:\/\//i, 'https://');
       if (/^(www\.|drive\.|docs\.)/i.test(s)) return 'https://' + s;
       return '';
     };
