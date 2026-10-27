@@ -763,14 +763,6 @@
       const [newsDataDe, setNewsDataDe] = useState('');
       const [newsDataAte, setNewsDataAte] = useState('');
 
-      // Formulário de contato
-      const [contatoNome, setContatoNome] = useState('');
-      const [contatoEmail, setContatoEmail] = useState('');
-      const [contatoTelefone, setContatoTelefone] = useState('');
-      const [contatoAssunto, setContatoAssunto] = useState('');
-      const [contatoMensagem, setContatoMensagem] = useState('');
-      const [feedbackContato, setFeedbackContato] = useState(false);
-      const [isSendingContato, setIsSendingContato] = useState(false);
 
       const triggerToast = (message, type = 'success') => {
         setToast({ message, type });
@@ -959,42 +951,6 @@
         return () => clearInterval(it);
       }, [isFeaturedHovered, ultimasTres.length, view]);
       useEffect(() => { if (featuredSlideIndex >= ultimasTres.length) setFeaturedSlideIndex(0); }, [ultimasTres.length]);
-
-      // ---- Contato (FormSubmit.co) ----
-      const handleContactSubmit = (e) => {
-        e.preventDefault();
-        if (!contatoNome || !contatoEmail || !contatoAssunto || !contatoMensagem) {
-          triggerToast('Preencha todos os campos obrigatórios.', 'error');
-          return;
-        }
-        setIsSendingContato(true);
-        fetch(`https://formsubmit.co/ajax/${CONFIG.EMAIL_CONTATO}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({
-            Nome: contatoNome,
-            Email: contatoEmail,
-            Telefone: contatoTelefone || '(não informado)',
-            Assunto: contatoAssunto,
-            Mensagem: contatoMensagem,
-            _subject: `[Observatório PNAE] ${contatoAssunto}`,
-            _template: 'table',
-            _captcha: 'false',
-            _replyto: contatoEmail
-          })
-        })
-          .then(res => res.json())
-          .then(data => {
-            if (data.success === 'true' || data.success === true) {
-              setFeedbackContato(true);
-              setContatoNome(''); setContatoEmail(''); setContatoTelefone(''); setContatoAssunto(''); setContatoMensagem('');
-            } else {
-              triggerToast('Não foi possível enviar a mensagem. Tente novamente.', 'error');
-            }
-          })
-          .catch(() => triggerToast('Não foi possível enviar a mensagem. Confira sua conexão.', 'error'))
-          .finally(() => setIsSendingContato(false));
-      };
 
       // ---- Estilos ----
       const themeBg = highContrast ? 'bg-black text-white' : 'bg-brand-cream text-brand-charcoal';
@@ -1940,73 +1896,124 @@
               {/* ============ SOBRE A REDE ============ */}
               {!globalSearch.trim() && view === 'sobre' && (
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-16 animate-fade-in">
-                  <div className="max-w-4xl mx-auto space-y-8">
-                    <h1 className="text-3xl font-extrabold text-brand-brown">Sobre a Rede PNAE Baixo Sul</h1>
-                    <p className="text-brand-charcoal/80 leading-relaxed">
-                      A Rede de Alimentação Escolar Saudável do Baixo Sul da Bahia reúne os 16 municípios consorciados ao CIAPRA em torno da melhoria da alimentação oferecida nas escolas. Com acompanhamento técnico e articulação entre prefeituras, nutricionistas e organizações da agricultura familiar, a rede busca garantir alimentos frescos para os estudantes e renda para os produtores do território.
-                    </p>
-                    <div className="p-6 bg-brand-brown text-white rounded-2xl shadow">
-                      <h2 className="text-lg font-bold mb-2 text-brand-yellow">Atuação do CIAPRA</h2>
-                      <p className="text-sm text-brand-light">
-                        O Consórcio Intermunicipal do Mosaico das APAs do Baixo Sul (CIAPRA) faz a gestão da integração territorial, apoia as cooperativas e associações na regularização documental e assessora as prefeituras nas chamadas públicas do PNAE.
+                  <div className="space-y-14">
+                    {/* Abertura */}
+                    <header className="relative overflow-hidden rounded-3xl bg-brand-brown text-white px-6 py-10 sm:px-12 sm:py-14 shadow-lg">
+                      <span className="absolute -right-16 -top-16 w-64 h-64 rounded-full bg-brand-yellow/10" aria-hidden="true"></span>
+                      <span className="absolute -right-4 bottom-[-5rem] w-48 h-48 rounded-full bg-brand-green/20" aria-hidden="true"></span>
+                      <div className="relative max-w-3xl space-y-5">
+                        <span className="inline-block text-[11px] font-black uppercase tracking-[0.2em] text-brand-yellow">Sobre a Rede</span>
+                        <h1 className="text-3xl sm:text-4xl font-black leading-tight">Rede PNAE Baixo Sul</h1>
+                        <p className="text-base sm:text-lg leading-relaxed text-white/90">
+                          A Rede PNAE Baixo Sul é uma iniciativa do <strong className="text-brand-yellow">CIAPRA</strong> criada para fortalecer a execução do Programa Nacional de Alimentação Escolar (PNAE) nos <strong className="text-brand-yellow">16 municípios</strong> do território do Baixo Sul da Bahia.
+                        </p>
+                      </div>
+                    </header>
+
+                    {/* Integração */}
+                    <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                      <div className="lg:col-span-5">
+                        <div className="w-12 h-1 bg-brand-green mb-4 rounded-full"></div>
+                        <h2 className="text-2xl font-black text-brand-brown tracking-tight">Quem a Rede integra</h2>
+                        <div className="flex flex-wrap gap-2 mt-5">
+                          {['Gestores públicos', 'Nutricionistas', 'Agricultores familiares', 'Cooperativas', 'Instituições parceiras'].map(t => (
+                            <span key={t} className="text-xs font-bold text-brand-darkGreen bg-brand-green/10 border border-brand-green/20 px-3 py-1.5 rounded-full">{t}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <p className="lg:col-span-7 text-brand-charcoal text-base leading-relaxed">
+                        O projeto promove a integração entre gestores públicos, nutricionistas, agricultores familiares, cooperativas e instituições parceiras, fortalecendo a agricultura familiar, qualificando a gestão pública e ampliando o acesso dos produtores locais às compras institucionais.
                       </p>
+                    </section>
+
+                    {/* Como atua */}
+                    <section className="space-y-6">
+                      <div>
+                        <div className="w-12 h-1 bg-brand-yellow mb-4 rounded-full"></div>
+                        <h2 className="text-2xl font-black text-brand-brown tracking-tight">Como a Rede atua</h2>
+                      </div>
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        {[
+                          ['🎓', 'Capacitação'],
+                          ['🤝', 'Articulação territorial'],
+                          ['🛠️', 'Apoio técnico'],
+                          ['📊', 'Monitoramento']
+                        ].map(([icone, titulo]) => (
+                          <div key={titulo} className="bg-white border border-brand-light rounded-2xl p-5 shadow-sm flex flex-col items-start gap-3">
+                            <span className="w-11 h-11 rounded-xl bg-brand-yellow/20 flex items-center justify-center text-xl" aria-hidden="true">{icone}</span>
+                            <h3 className="font-extrabold text-brand-brown text-sm sm:text-base leading-tight">{titulo}</h3>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-brand-charcoal text-base leading-relaxed max-w-4xl">
+                        Por meio de ações de capacitação, articulação territorial, apoio técnico e monitoramento, a Rede busca tornar o PNAE um instrumento estratégico para o desenvolvimento regional, garantindo uma alimentação escolar de qualidade, valorizando a produção local e gerando oportunidades para quem vive e produz no campo.
+                      </p>
+                    </section>
+
+                    {/* Fechamento */}
+                    <section className="rounded-3xl bg-brand-green/10 border border-brand-green/25 px-6 py-8 sm:px-12 sm:py-10">
+                      <blockquote className="border-l-4 border-brand-green pl-5 sm:pl-6">
+                        <p className="text-lg sm:text-xl font-semibold text-brand-brown leading-relaxed">
+                          Mais do que uma rede de cooperação, a iniciativa representa um modelo de gestão compartilhada que une inovação, transparência e desenvolvimento sustentável em benefício de todo o território do Baixo Sul.
+                        </p>
+                      </blockquote>
+                      <div className="flex flex-wrap gap-2 mt-6 pl-6 sm:pl-7">
+                        {['Inovação', 'Transparência', 'Desenvolvimento sustentável'].map(t => (
+                          <span key={t} className="text-xs font-black uppercase tracking-wide text-brand-darkGreen bg-white border border-brand-green/30 px-3 py-1.5 rounded-full">{t}</span>
+                        ))}
+                      </div>
+                    </section>
+
+                    {/* Atuação do CIAPRA */}
+                    <div className="bg-white border border-brand-light rounded-2xl p-6 shadow-sm flex gap-4 items-start">
+                      <span className="w-11 h-11 rounded-xl bg-brand-brown/10 flex items-center justify-center text-xl shrink-0" aria-hidden="true">🏛️</span>
+                      <div>
+                        <h2 className="text-base font-extrabold text-brand-brown mb-1">Atuação do CIAPRA</h2>
+                        <p className="text-sm text-brand-charcoal/80 leading-relaxed">
+                          O Consórcio Intermunicipal do Mosaico das APAs do Baixo Sul (CIAPRA) faz a gestão da integração territorial, apoia as cooperativas e associações na regularização documental e assessora as prefeituras nas chamadas públicas do PNAE.
+                        </p>
+                      </div>
                     </div>
                   </div>
 
-                  <section className="grid grid-cols-1 lg:grid-cols-12 gap-12 bg-white p-6 sm:p-8 md:p-12 rounded-3xl border border-brand-light shadow-sm">
+                  <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 bg-white p-6 sm:p-8 md:p-12 rounded-3xl border border-brand-light shadow-sm">
                     <div className="lg:col-span-5 space-y-6">
-                      <h2 className="text-2xl font-bold text-brand-brown">Fale Conosco</h2>
-                      <p className="text-brand-charcoal/80 text-sm">Dúvidas sobre editais, cadastro da sua associação de produtores ou sugestões? Escreva para nós.</p>
-                      <div className="space-y-4 text-sm text-brand-charcoal">
-                        <div className="flex items-start gap-3"><span className="font-bold text-brand-green">📍</span><p>Sede do CIAPRA Baixo Sul<br />{CONFIG.ENDERECO}</p></div>
-                        <div className="flex items-start gap-3"><span className="font-bold text-brand-green">📞</span><p>{CONFIG.TELEFONE_CONTATO}</p></div>
-                        <div className="flex items-start gap-3"><span className="font-bold text-brand-green">✉</span><a href={`mailto:${CONFIG.EMAIL_CONTATO}`} className="hover:underline break-all">{CONFIG.EMAIL_CONTATO}</a></div>
+                      <div>
+                        <div className="w-12 h-1 bg-brand-yellow mb-4 rounded-full"></div>
+                        <h2 className="text-2xl font-black text-brand-brown tracking-tight">Fale Conosco</h2>
+                        <p className="text-brand-charcoal/80 text-sm mt-2">Dúvidas sobre editais, cadastro da sua associação de produtores ou sugestões? Entre em contato com a equipe do CIAPRA.</p>
                       </div>
-                      <div className="rounded-2xl overflow-hidden border border-brand-light shadow-sm">
-                        <iframe src={`https://www.google.com/maps?q=${CONFIG.MAPS_COORD}&z=17&output=embed`} title="Localização da sede do CIAPRA em Ituberá" className="w-full border-0" style={{ height: '260px' }} loading="lazy" referrerPolicy="no-referrer-when-downgrade"></iframe>
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-4 p-4 rounded-2xl bg-brand-cream border border-brand-light">
+                          <span className="w-10 h-10 rounded-xl bg-brand-green/10 flex items-center justify-center text-lg shrink-0" aria-hidden="true">📍</span>
+                          <div className="text-sm text-brand-charcoal">
+                            <span className="block text-[11px] font-bold uppercase tracking-wide text-brand-charcoal/60">Endereço</span>
+                            <span className="block font-bold text-brand-brown">Sede do CIAPRA Baixo Sul</span>
+                            <span className="block">{CONFIG.ENDERECO}</span>
+                          </div>
+                        </div>
+                        <a href={`tel:+55${CONFIG.TELEFONE_CONTATO.replace(/\D/g, '')}`} className="flex items-start gap-4 p-4 rounded-2xl bg-brand-cream border border-brand-light hover:border-brand-green transition-colors">
+                          <span className="w-10 h-10 rounded-xl bg-brand-green/10 flex items-center justify-center text-lg shrink-0" aria-hidden="true">📞</span>
+                          <div className="text-sm text-brand-charcoal">
+                            <span className="block text-[11px] font-bold uppercase tracking-wide text-brand-charcoal/60">Telefone</span>
+                            <span className="block font-bold text-brand-brown">{CONFIG.TELEFONE_CONTATO}</span>
+                          </div>
+                        </a>
+                        <a href={`mailto:${CONFIG.EMAIL_CONTATO}`} className="flex items-start gap-4 p-4 rounded-2xl bg-brand-cream border border-brand-light hover:border-brand-green transition-colors">
+                          <span className="w-10 h-10 rounded-xl bg-brand-green/10 flex items-center justify-center text-lg shrink-0" aria-hidden="true">✉️</span>
+                          <div className="text-sm text-brand-charcoal min-w-0">
+                            <span className="block text-[11px] font-bold uppercase tracking-wide text-brand-charcoal/60">E-mail</span>
+                            <span className="block font-bold text-brand-brown break-all">{CONFIG.EMAIL_CONTATO}</span>
+                          </div>
+                        </a>
                       </div>
-                      <a href={`https://www.google.com/maps?q=${CONFIG.MAPS_COORD}`} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-brand-primary hover:underline">📍 Abrir no Google Maps →</a>
                     </div>
 
-                    <div className="lg:col-span-7">
-                      {feedbackContato ? (
-                        <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-2xl text-center space-y-4">
-                          <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-2xl mx-auto">✓</div>
-                          <h3 className="font-extrabold text-emerald-900">Mensagem enviada com sucesso!</h3>
-                          <p className="text-sm text-emerald-800">Sua mensagem foi encaminhada à equipe do CIAPRA. Retornaremos em breve.</p>
-                          <button onClick={() => setFeedbackContato(false)} className="text-xs font-bold text-emerald-800 hover:underline">Enviar outra mensagem</button>
-                        </div>
-                      ) : (
-                        <form onSubmit={handleContactSubmit} className="space-y-4">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                              <label htmlFor="c-nome" className="block text-xs font-bold text-brand-charcoal uppercase mb-1">Seu nome *</label>
-                              <input id="c-nome" type="text" required value={contatoNome} onChange={(e) => setContatoNome(e.target.value)} className="w-full border border-brand-light rounded-lg p-2.5 bg-brand-cream text-brand-charcoal text-sm focus:ring-2 focus:ring-brand-green" />
-                            </div>
-                            <div>
-                              <label htmlFor="c-email" className="block text-xs font-bold text-brand-charcoal uppercase mb-1">Seu e-mail *</label>
-                              <input id="c-email" type="email" required value={contatoEmail} onChange={(e) => setContatoEmail(e.target.value)} className="w-full border border-brand-light rounded-lg p-2.5 bg-brand-cream text-brand-charcoal text-sm focus:ring-2 focus:ring-brand-green" />
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                              <label htmlFor="c-tel" className="block text-xs font-bold text-brand-charcoal uppercase mb-1">Telefone</label>
-                              <input id="c-tel" type="tel" value={contatoTelefone} onChange={(e) => setContatoTelefone(e.target.value)} placeholder="(73) 99999-9999" className="w-full border border-brand-light rounded-lg p-2.5 bg-brand-cream text-brand-charcoal text-sm focus:ring-2 focus:ring-brand-green" />
-                            </div>
-                            <div>
-                              <label htmlFor="c-assunto" className="block text-xs font-bold text-brand-charcoal uppercase mb-1">Assunto *</label>
-                              <input id="c-assunto" type="text" required value={contatoAssunto} onChange={(e) => setContatoAssunto(e.target.value)} className="w-full border border-brand-light rounded-lg p-2.5 bg-brand-cream text-brand-charcoal text-sm focus:ring-2 focus:ring-brand-green" />
-                            </div>
-                          </div>
-                          <div>
-                            <label htmlFor="c-msg" className="block text-xs font-bold text-brand-charcoal uppercase mb-1">Sua mensagem *</label>
-                            <textarea id="c-msg" rows="5" required value={contatoMensagem} onChange={(e) => setContatoMensagem(e.target.value)} className="w-full border border-brand-light rounded-lg p-2.5 bg-brand-cream text-brand-charcoal text-sm focus:ring-2 focus:ring-brand-green"></textarea>
-                          </div>
-                          <button type="submit" disabled={isSendingContato} className={btnPrimary + ' w-full py-3 rounded-lg font-bold disabled:opacity-60 disabled:cursor-not-allowed'}>
-                            {isSendingContato ? 'Enviando...' : 'Enviar mensagem'}
-                          </button>
-                        </form>
-                      )}
+                    <div className="lg:col-span-7 flex flex-col gap-3">
+                      <div className="rounded-2xl overflow-hidden border border-brand-light shadow-sm flex-grow min-h-[300px]">
+                        <iframe src={`https://www.google.com/maps?q=${CONFIG.MAPS_COORD}&z=17&output=embed`} title="Localização da sede do CIAPRA em Ituberá" className="w-full h-full border-0" style={{ minHeight: '300px' }} loading="lazy" referrerPolicy="no-referrer-when-downgrade"></iframe>
+                      </div>
+                      <a href={`https://www.google.com/maps?q=${CONFIG.MAPS_COORD}`} target="_blank" rel="noopener noreferrer" className="self-start text-xs font-bold text-brand-primary hover:underline">📍 Abrir no Google Maps →</a>
                     </div>
                   </section>
                 </div>
