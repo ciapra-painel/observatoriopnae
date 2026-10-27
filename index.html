@@ -594,7 +594,7 @@
 
     const METRICAS_COMPARATIVO = [
       { key: 'valorContratado', rotulo: 'Repasse PNAE 2025', valor: (m) => m.valorContratado, fmt: (v) => moedaCompacta(v), fonte: 'FNDE, liberações do PNAE 2025' },
-      { key: 'porAluno', rotulo: 'Repasse por aluno', valor: (m) => m.valorContratado / m.alunosRedeMunicipal, fmt: (v) => moedaCompacta(v), fonte: 'Repasse FNDE 2025 ÷ alunos da rede municipal (Inep 2025)' },
+      { key: 'porAluno', rotulo: 'Repasse por aluno', valor: (m) => m.valorContratado / m.alunosRedeMunicipal, fmt: (v) => moedaCompacta(v), fonte: 'Repasse FNDE 2025 ÷ matrículas da rede municipal (Inep 2025)' },
       { key: 'alunosRedeMunicipal', rotulo: 'Alunos', valor: (m) => m.alunosRedeMunicipal, fmt: (v) => v.toLocaleString('pt-BR'), fonte: 'Inep, Sinopse Estatística da Educação Básica 2025' },
       { key: 'agricultores', rotulo: 'Agricultores (CAF)', valor: (m) => m.agricultores, fmt: (v) => v.toLocaleString('pt-BR'), fonte: 'MDA, Cadastro Nacional da Agricultura Familiar, jun/2026' },
       { key: 'meta30Porcento', rotulo: '% na agricultura familiar', valor: (m) => m.meta30Porcento, fmt: (v) => `${v}%`, referencias: [30, 45], escalaMin: 50, fonte: 'Percentual declarado pelas prefeituras, consolidado pelo CIAPRA. Linhas: mínimo legal de 30% (até 2025) e 45% (desde 2026)' }
@@ -1229,7 +1229,7 @@
                         <IndicadorTile cor="#4B4D4F" icone="🎓" rotulo="Alunos na rede municipal" valor={totalAlunos.toLocaleString('pt-BR')} nota="Inep, Sinopse da Educação Básica 2025" />
                         <IndicadorTile cor="#327025" icone="🌱" rotulo="Agricultores familiares (CAF)" valor={totalAgricultores.toLocaleString('pt-BR')} nota="MDA, Cadastro da Agricultura Familiar, jun/2026" />
                         <IndicadorTile cor="#C98A0B" icone="💰" rotulo="Repasse PNAE 2025" valor={moedaCompacta(totalRepasse)} nota={`${formatarMoeda(totalRepasse)} · FNDE`} />
-                        <IndicadorTile cor="#C98A0B" icone="🍽️" rotulo="Repasse médio por aluno" valor={moedaCompacta(totalRepasse / totalAlunos)} nota="Por aluno da rede municipal, no ano de 2025" />
+                        <IndicadorTile cor="#C98A0B" icone="🍽️" rotulo="Repasse médio por aluno" valor={moedaCompacta(totalRepasse / totalAlunos)} nota="Repasse FNDE 2025 ÷ matrículas da rede municipal (Inep 2025)" />
                         <IndicadorTile cor="#327025" icone="🤝" rotulo="Meta mínima para a agricultura familiar" valor={moedaCompacta(totalRepasse * 0.3)} nota="30% do repasse de 2025. Desde 2026 o mínimo é 45% (Lei nº 15.226/2025)" />
                       </div>
                     </div>
