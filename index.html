@@ -97,13 +97,15 @@
     // o arquivo novamente ao GitHub.
     // =====================================================================================
     const CONFIG = {
-      // Planilha de Editais (BDEditais). A PRIMEIRA aba deve ter o cabeçalho de editais.
-      // Compartilhamento: "Qualquer pessoa com o link → Leitor".
-      PLANILHA_EDITAIS_ID: '1PFE9ErwZLOAgE806VDxeXHHtB1eSNVd9oHDZu60Zejc',
+      // Planilhas publicadas na Web (Arquivo → Compartilhar → Publicar na Web → aba do site).
+      // As planilhas podem ficar com acesso RESTRITO: o site só lê a aba publicada.
+      // Pode colar o link "pubhtml" ou o de CSV; o site converte sozinho.
+      // Lembre de marcar "Republicar automaticamente quando forem feitas alterações".
+      PLANILHA_EDITAIS_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRwOq6fwHrUmwWw7KBui7dilNmISeMHSVRgqj1ydq7hmbNcD08IQMgDaQShJJSUgSJh9q1_yTodumpj/pubhtml?gid=0&single=true',
 
-      // Planilha de Notícias (separada). PRIMEIRA aba com o cabeçalho:
+      // Notícias — cabeçalho esperado:
       // Título | Subtítulo | Resumo | Conteúdo | Categoria | Município | Autor | Data | Status | Imagem (URL) | Galeria (URLs separados por vírgula)
-      PLANILHA_NOTICIAS_ID: '1c5XBCnyy2NWsI1RuPX-vy-EMVYc1SSK0FNKWiQH_jLY',
+      PLANILHA_NOTICIAS_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSEKyvudAyuS5qpm71f3Ey9jAFqA6LVCtKZDbYOhG6lmI7JU7Y77JAGIA7pYmGwMv05QrKy1teWcf9i/pubhtml?gid=0&single=true',
 
       // Chave da API do Google Drive (usada só para listar a pasta da Biblioteca).
       // IMPORTANTE: restringir no Google Cloud à "Google Drive API" e aos referenciadores
@@ -310,18 +312,25 @@
         error: (err) => reject(err)
       });
     });
-    // Tenta a exportação direta e, se não vier nada útil, a consulta gviz como reserva
-    const lerPrimeiraAba = async (sheetId, validar) => {
-      const urls = [
-        `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=0`,
-        `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=0`
-      ];
-      for (const url of urls) {
+    // Converte o link publicado (pubhtml) em link de CSV
+    const urlCSVPublicado = (url) => {
+      const u = String(url || '').trim();
+      if (!u) return '';
+      if (/output=csv/.test(u)) return u;
+      const base = u.replace('/pubhtml', '/pub').replace(/[?#].*$/, '');
+      const gid = (u.match(/[?&]gid=(\d+)/) || [])[1] || '0';
+      return `${base}?gid=${gid}&single=true&output=csv`;
+    };
+    const lerPlanilhaPublicada = async (url, validar) => {
+      const csv = urlCSVPublicado(url);
+      // Parâmetro extra evita que o navegador mostre uma cópia antiga em cache
+      const comCache = csv + `&t=${Math.floor(Date.now() / 60000)}`;
+      for (const tentativa of [comCache, csv]) {
         try {
-          const linhas = await baixarCSV(url);
+          const linhas = await baixarCSV(tentativa);
           if (validar(linhas)) return linhas;
         } catch (e) {
-          console.warn('[Observatório PNAE] Falha ao ler', url, e);
+          console.warn('[Observatório PNAE] Falha ao ler a planilha publicada', e);
         }
       }
       return null;
@@ -804,7 +813,7 @@
       // ---- Carregamento das planilhas ----
       const carregarEditais = useCallback(async () => {
         setStatusEditais('carregando');
-        const linhas = await lerPrimeiraAba(CONFIG.PLANILHA_EDITAIS_ID, (l) => processarEditais(l).length > 0);
+        const linhas = await lerPlanilhaPublicada(CONFIG.PLANILHA_EDITAIS_URL, (l) => processarEditais(l).length > 0);
         if (linhas) {
           setEditais(processarEditais(linhas));
           setStatusEditais('ok');
@@ -816,7 +825,7 @@
 
       const carregarNoticias = useCallback(async () => {
         setStatusNoticias('carregando');
-        const linhas = await lerPrimeiraAba(CONFIG.PLANILHA_NOTICIAS_ID, (l) => encontrarCabecalhoNoticias(l) !== -1);
+        const linhas = await lerPlanilhaPublicada(CONFIG.PLANILHA_NOTICIAS_URL, (l) => encontrarCabecalhoNoticias(l) !== -1);
         if (linhas) {
           setNoticias(processarNoticias(linhas));
           setStatusNoticias('ok');
