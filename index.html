@@ -1694,9 +1694,7 @@
 
                   <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
                     <h2 className="text-xl font-black text-brand-brown">Arquivos Disponíveis</h2>
-                    <a href={`https://drive.google.com/drive/folders/${CONFIG.PASTA_BIBLIOTECA_ID}`} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-brand-primary hover:underline">📂 Abrir a pasta no Google Drive →</a>
-                  </div>
-
+                    
                   {CONFIG.DRIVE_API_KEY && !bibliotecaErro ? (
                     <>
                       {bibliotecaPilha.length > 1 && (
